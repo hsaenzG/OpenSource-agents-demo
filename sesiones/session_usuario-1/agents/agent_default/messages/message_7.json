@@ -1,0 +1,14 @@
+{
+  "message": {
+    "role": "assistant",
+    "content": [
+      {
+        "text": "Aquí te dejo una lista de 10 canciones que podrían ser adecuadas para un viernes:\n\n1. My Bloody Valentine - \"Only Shallow\"\n2. The Cure - \"Just Like Heaven\"\n3. Slowdive - \"Sugar for the Pill\"\n4. The Radio Dept. - \"Pet Grief\"\n5. M83 - \"Reunion\"\n6. Florence + The Machine - \"Shake It Out\" ( cover por una banda shoegaze)\n7. Tame Impala - \"Solitude Is Bliss\"\n8. The Jesus and Mary Chain - \"Just Like Honey\"\n9. Cocteau Twins - \"Heaven or Las Vegas\"\n10. Ride - \"Vapour Trail\"\n\nEspero que disfrutes de esta lista. ¡Disfruta tu viernes!"
+      }
+    ]
+  },
+  "message_id": 7,
+  "redact_message": null,
+  "created_at": "2026-04-12T23:57:30.596958+00:00",
+  "updated_at": "2026-04-12T23:57:30.597572+00:00"
+}
