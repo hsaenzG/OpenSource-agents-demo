@@ -1,8 +1,8 @@
 # 🎧 DJ Agent — Agente de IA desde cero
 
-Un agente de IA que actúa como DJ y curador musical, construido con Python, [Strands Agents](https://github.com/strands-agents/sdk-python) y [Ollama](https://ollama.com/). Todo open source, local y gratis.
+Un agente de IA que actúa como DJ y curador musical, construido con Python, [Strands Agents](https://github.com/strands-agents/sdk-python?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el) y [Ollama](https://ollama.com/). Todo open source, local y gratis.
 
-Basado en el artículo: [Cómo crear un agente de IA desde cero — open source, local y gratis](Cómo%20crear%20un%20agente%20de%20IA%20desde%20cero%20-%20open%20source%2C%20local%20y%20gratis.md)
+Basado en el artículo: [Cómo crear un agente de IA desde cero — open source, local y gratis](https://builder.aws.com/content/3CM7pfa65G4sfLy1X1J0a3aIxPC/como-crear-un-agente-de-ia-desde-cero-open-source-local-y-gratis?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el)
 
 ## Requisitos
 
@@ -78,7 +78,7 @@ python capa4_memoria.py
 
 ## Recursos
 
-- [Documentación de Strands Agents](https://strandsagents.com/)
-- [Repo de Strands en GitHub](https://github.com/strands-agents/sdk-python) — Apache 2.0
-- [Community tools](https://github.com/strands-agents/tools)
+- [Documentación de Strands Agents](https://strandsagents.com?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el)
+- [Repo de Strands en GitHub](https://github.com/strands-agents/sdk-python?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el) — Apache 2.0
+- [Community tools](https://github.com/strands-agents/tools?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el)
 - [Ollama](https://ollama.com/)
