@@ -82,9 +82,16 @@ dj = Agent(
 )
 
 # Primera conversación
-print("=== Primera conversación ===")
-dj("Me encanta el indie rock y el shoegaze. No soporto el reggaetón.")
+prompt1 = "Me encanta el indie rock y el shoegaze. No soporto el reggaetón."
+print(f"\n🎵 Prompt: {prompt1}\n")
+print("🤖 DJ: ", end="", flush=True)
+dj(prompt1)
 
-print("\n\n=== Segunda conversación ===")
-# El agente debería recordar los gustos
-dj("Armame algo para el viernes")
+print("\n")
+
+# Segunda conversación — el agente debería recordar los gustos
+prompt2 = "Armame algo para el viernes"
+print(f"🎵 Prompt: {prompt2}\n")
+print("🤖 DJ: ", end="", flush=True)
+dj(prompt2)
+print()

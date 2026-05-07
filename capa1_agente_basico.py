@@ -13,4 +13,8 @@ dj = Agent(
     Recomiendas música basándote en el mood, la ocasión, y los gustos del usuario."""
 )
 
-dj("Recomiéndame algo para escuchar mientras programo")
+prompt = "¿Cual fue el último exitó de Queen?"
+print(f"\n🎵 Prompt: {prompt}\n")
+print("🤖 DJ: ", end="", flush=True)
+dj(prompt)
+print()

@@ -38,4 +38,8 @@ dj = Agent(
     tools=[buscar_canciones]
 )
 
-dj("Quiero escuchar jazz mientras trabajo")
+prompt = "Quiero escuchar jazz mientras trabajo"
+print(f"\n🎵 Prompt: {prompt}\n")
+print("🤖 DJ: ", end="", flush=True)
+dj(prompt)
+print()

@@ -465,7 +465,7 @@ if __name__ == "__main__":
             if not mensaje:
                 continue
 
-            print("\n🎧 DJ: ", end="", flush=True)
+            print(f"\n🤖 DJ: ", end="", flush=True)
             dj(mensaje)
             print("\n")
 

@@ -82,4 +82,8 @@ dj = Agent(
     tools=[buscar_canciones, analizar_energia, duracion_playlist]
 )
 
-dj("Armame una playlist de una hora para una fiesta en casa")
+prompt = "Armame una playlist de una hora para una fiesta en casa"
+print(f"\n🎵 Prompt: {prompt}\n")
+print("🤖 DJ: ", end="", flush=True)
+dj(prompt)
+print()

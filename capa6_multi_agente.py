@@ -525,8 +525,9 @@ orquestador = Agent(
 
     Tienes 3 DJs especializados disponibles como herramientas:
 
-    1. consultar_dj_personal — Para recomendaciones basadas en gustos, descubrir música,
-       "ponme algo", "recomiéndame", "qué hay nuevo de X artista"
+    1. consultar_dj_personal — Para recomendaciones, descubrir música, reproducir canciones,
+       "ponme algo", "recomiéndame", "qué hay nuevo de X artista",
+       o cuando el usuario solo dice el nombre de una canción o artista.
 
     2. consultar_dj_eventos — Para eventos con duración específica: fiestas, bodas, cenas,
        "arma una playlist de 3 horas para una fiesta", "música para mi boda"
@@ -534,20 +535,17 @@ orquestador = Agent(
     3. consultar_dj_emocional — Para estados de ánimo: "estoy triste", "me siento motivado",
        "necesito música para relajarme", "estoy ansioso"
 
-    También puedes reproducir música directamente:
-    - reproducir_cancion — Para reproducir una canción específica por nombre
-    - reproducir_playlist — Para reproducir una playlist por nombre o ID
-
     REGLAS:
-    - SIEMPRE delega al sub-agente apropiado para buscar y armar playlists.
+    - Si el usuario solo escribe un nombre de canción o artista (ej: "Bohemian Rhapsody",
+      "Shakira", "ponme Despacito"), usa consultar_dj_personal y pídele que la busque y reproduzca.
+    - Para estados de ánimo y emociones, usa consultar_dj_emocional.
+    - Para eventos con duración, usa consultar_dj_eventos.
     - Pasa el mensaje COMPLETO del usuario al sub-agente.
     - Si no estás seguro, usa consultar_dj_personal como default.
-    - Si el usuario pide reproducir algo específico, usa reproducir_cancion o reproducir_playlist directamente.
     - Presenta la respuesta del sub-agente al usuario de forma natural.
 
     Respondes en español.""",
-    tools=[consultar_dj_personal, consultar_dj_eventos, consultar_dj_emocional,
-           reproducir_cancion, reproducir_playlist],
+    tools=[consultar_dj_personal, consultar_dj_eventos, consultar_dj_emocional],
 )
 
 
@@ -575,7 +573,7 @@ if __name__ == "__main__":
             if not mensaje:
                 continue
 
-            print("\n🎧 DJ: ", end="", flush=True)
+            print(f"\n🤖 DJ: ", end="", flush=True)
             orquestador(mensaje)
             print("\n")
 
