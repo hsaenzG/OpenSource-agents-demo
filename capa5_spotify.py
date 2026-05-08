@@ -411,7 +411,21 @@ def obtener_recomendaciones_spotify(artistas_semilla: list = None, generos_semil
 
 modelo = BedrockModel(model_id="us.amazon.nova-pro-v1:0", region_name="us-east-1")
 
-session_manager = FileSessionManager(session_id="usuario-1", storage_dir="./sesiones")
+
+def crear_session_manager(session_id: str, storage_dir: str = "./sesiones") -> FileSessionManager:
+    """Crea un FileSessionManager que funciona tanto si la sesión es nueva como si ya existe."""
+    session_path = os.path.join(storage_dir, f"session_{session_id}")
+    session_file = os.path.join(session_path, "session.json")
+
+    # Si el directorio existe pero no tiene session.json, limpiarlo
+    if os.path.exists(session_path) and not os.path.exists(session_file):
+        import shutil
+        shutil.rmtree(session_path)
+
+    return FileSessionManager(session_id=session_id, storage_dir=storage_dir)
+
+
+session_manager = crear_session_manager("usuario-1")
 
 dj = Agent(
     model=modelo,
@@ -421,14 +435,16 @@ dj = Agent(
     1. NUNCA inventes información sobre canciones, artistas, álbumes o URLs.
     2. NUNCA generes links de Spotify en texto. Los links no funcionan.
     3. Para cualquier pregunta sobre música: llama buscar_en_spotify PRIMERO.
-    4. Para reproducir música: llama reproducir_cancion con el nombre de la canción.
+    4. Para reproducir música: SIEMPRE llama reproducir_cancion con el nombre de la canción.
+       Ejemplo: si el usuario dice "ponme Despacito" → llama reproducir_cancion(nombre_cancion="Despacito", artista="Luis Fonsi")
     5. Para crear playlists: llama crear_playlist_en_spotify con las URIs de los resultados de búsqueda.
     6. Basa TODAS tus respuestas en los datos que devuelven las herramientas.
+    7. Si el usuario dice solo un nombre de canción o "reproduce X", SIEMPRE usa reproducir_cancion.
 
     Herramientas disponibles:
     - buscar_en_spotify: busca canciones reales en Spotify
     - reproducir_cancion: reproduce una canción por nombre (busca automáticamente en Spotify)
-    - reproducir_playlist: reproduce una playlist por ID
+    - reproducir_playlist: reproduce una playlist por nombre o ID
     - crear_playlist_en_spotify: crea una playlist nueva
     - mis_top_artistas / mis_top_canciones: consulta gustos del usuario
     - obtener_recomendaciones_spotify: pide recomendaciones a Spotify

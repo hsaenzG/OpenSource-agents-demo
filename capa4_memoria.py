@@ -82,7 +82,7 @@ dj = Agent(
 )
 
 # Primera conversación
-prompt1 = "Me encanta el indie rock y el shoegaze. No soporto el reggaetón."
+prompt1 = "Me encanta el indie rock y el rock en español y rock clasico."
 print(f"\n🎵 Prompt: {prompt1}\n")
 print("🤖 DJ: ", end="", flush=True)
 dj(prompt1)
