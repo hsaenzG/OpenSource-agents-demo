@@ -43,7 +43,7 @@ ollama serve
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install 'strands-agents[ollama]' spotipy python-dotenv
+pip install 'strands-agents[ollama]' spotipy python-dotenv streamlit
 ```
 
 ### 5. (Opcional) Configurar Spotify — para capas 5 y 6
@@ -79,6 +79,7 @@ Cada archivo representa una capa incremental del agente:
 | `capa4_memoria.py` | 4 — Memoria | `FileSessionManager` |
 | `capa5_spotify.py` | 5 — API externa | `BedrockModel`, `spotipy`, reproducción |
 | `capa6_multi_agente.py` | 6 — Multi-agente | Orquestador + sub-agentes como tools |
+| `app.py` | 🎸 Frontend | Streamlit UI, estilo dev + rock |
 
 ```bash
 # Capas básicas (Ollama local)
@@ -90,6 +91,9 @@ python capa4_memoria.py
 # Capas avanzadas (Bedrock + Spotify)
 python capa5_spotify.py
 python capa6_multi_agente.py
+
+# Frontend (Bedrock + Spotify + Streamlit)
+streamlit run app.py
 ```
 
 ## Detalle de cada capa
@@ -145,12 +149,55 @@ El concepto clave: **los sub-agentes se exponen como `@tool` del orquestador**. 
 
 Los sub-agentes usan `callback_handler=None` para silenciar su output — solo el orquestador habla con el usuario.
 
+## Frontend — Streamlit (app.py)
+
+Una interfaz web moderna con estética **dev + rock** 🎸 que conecta con el agente DJ.
+
+```bash
+streamlit run app.py
+```
+
+Se abre en `http://localhost:8501`.
+
+### Features
+
+- **Tema oscuro** con gradientes negro/púrpura y acentos neón (rosa, verde, naranja)
+- **Tipografía** JetBrains Mono + Space Grotesk con headers en gradiente
+- **Chat interactivo** con el agente DJ — pide playlists, busca canciones, reproduce música
+- **Now Playing** — widget en el sidebar que muestra en tiempo real la canción que está sonando en Spotify:
+  - Carátula del álbum
+  - Barras de ecualizador animadas
+  - Nombre, artista y álbum
+  - Barra de progreso con timestamps
+  - Estado pausado / nada sonando
+- **Quick prompts** — botones rápidos para arrancar: rock para programar, fiesta, chill, melancólico, máxima energía
+- **System status** — indicadores de conexión del agente, Spotify y biblioteca local
+- **Stats de la biblioteca** — breakdown de géneros y moods con barras ASCII
+
+### Requisitos adicionales
+
+- `pip install streamlit` (ya incluido en el paso 4)
+- `pip install "botocore[crt]"` (necesario para credenciales de AWS)
+- AWS CLI configurado con acceso a Amazon Bedrock
+- (Opcional) Spotify configurado en `.env` para reproducción y búsqueda real
+
+### Stack
+
+| Componente | Tecnología |
+|---|---|
+| Frontend | Streamlit |
+| Agente | Strands Agents |
+| Modelo | Amazon Bedrock (Nova Pro) |
+| Música | Spotify API (spotipy) |
+| Estilo | CSS custom (dark theme) |
+
 ## Estructura del proyecto
 
 ```
 .
 ├── README.md
 ├── .env                            # Credenciales de Spotify (no se sube a git)
+├── app.py                          # 🎸 Frontend Streamlit (dev + rock)
 ├── data/
 │   └── canciones.json              # Biblioteca musical local (30 canciones)
 ├── capa1_agente_basico.py          # Agente básico (Ollama)
@@ -158,7 +205,7 @@ Los sub-agentes usan `callback_handler=None` para silenciar su output — solo e
 ├── capa3_multi_tools.py            # Agente + múltiples herramientas
 ├── capa4_memoria.py                # Agente + memoria persistente
 ├── capa5_spotify.py                # Agente + Spotify (Bedrock)
-├── capa6_multi_agente.py           # Multi-agente con selector de consola
+├── capa6_multi_agente.py           # Multi-agente con orquestador
 └── sesiones/                       # Sesiones guardadas (generado automáticamente)
 ```
 
@@ -168,6 +215,7 @@ Los sub-agentes usan `callback_handler=None` para silenciar su output — solo e
 - [Repo de Strands en GitHub](https://github.com/strands-agents/sdk-python?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el) — Apache 2.0
 - [Community tools](https://github.com/strands-agents/tools?trk=b4df06f7-1a05-4faf-a488-43ff27da389d&sc_channel=el)
 - [Ollama](https://ollama.com/)
+- [Streamlit](https://streamlit.io/)
 - [Spotipy — Python library for Spotify](https://spotipy.readthedocs.io/)
 - [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 - [Amazon Bedrock](https://aws.amazon.com/bedrock/)
