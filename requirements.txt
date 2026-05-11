@@ -1,0 +1,5 @@
+strands-agents[ollama]
+spotipy
+python-dotenv
+streamlit
+botocore[crt]
