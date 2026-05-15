@@ -1,6 +1,7 @@
 from strands import Agent, tool
 from strands.models.ollama import OllamaModel
 from strands.session.file_session_manager import FileSessionManager
+from utils_color import color_callback_handler, print_prompt, print_agent_prefix, print_agent_end
 import json
 
 # Cargar biblioteca local de canciones
@@ -69,7 +70,21 @@ def duracion_playlist(canciones: list) -> str:
 
 modelo = OllamaModel(model_id="llama3.1", host="http://localhost:11434")
 
-session_manager = FileSessionManager(session_id="usuario-1", storage_dir="./sesiones")
+import os
+import shutil
+
+def crear_session_manager(session_id: str, storage_dir: str = "./sesiones") -> FileSessionManager:
+    """Crea un FileSessionManager que funciona tanto si la sesión es nueva como si ya existe."""
+    session_path = os.path.join(storage_dir, f"session_{session_id}")
+    session_file = os.path.join(session_path, "session.json")
+
+    # Si el directorio existe pero no tiene session.json, limpiarlo
+    if os.path.exists(session_path) and not os.path.exists(session_file):
+        shutil.rmtree(session_path)
+
+    return FileSessionManager(session_id=session_id, storage_dir=storage_dir)
+
+session_manager = crear_session_manager("usuario-1")
 
 dj = Agent(
     model=modelo,
@@ -79,19 +94,21 @@ dj = Agent(
     Usa tus herramientas para buscar en la biblioteca real del usuario.""",
     tools=[buscar_canciones, analizar_energia, duracion_playlist],
     session_manager=session_manager,
+    callback_handler=color_callback_handler,
 )
 
 # Primera conversación
 prompt1 = "Me encanta el indie rock y el rock en español y rock clasico."
-print(f"\n🎵 Prompt: {prompt1}\n")
-print("🤖 DJ: ", end="", flush=True)
+print_prompt(prompt1)
+print_agent_prefix()
 dj(prompt1)
+print_agent_end()
 
-print("\n")
+print()
 
 # Segunda conversación — el agente debería recordar los gustos
 prompt2 = "Armame algo para el viernes"
-print(f"🎵 Prompt: {prompt2}\n")
-print("🤖 DJ: ", end="", flush=True)
+print_prompt(prompt2)
+print_agent_prefix()
 dj(prompt2)
-print()
+print_agent_end()

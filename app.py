@@ -7,6 +7,9 @@ import streamlit as st
 import json
 import os
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─── Page Config ──────────────────────────────────────────────────────────────
 
@@ -162,6 +165,28 @@ st.markdown("""
     }
     ::-webkit-scrollbar-thumb:hover {
         background: #ff0066;
+    }
+
+    /* ─── Colores de mensajes ─── */
+
+    /* Respuesta del agente en verde */
+    .agent-response {
+        color: #00ff88 !important;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Prompt del usuario en amarillo */
+    .user-prompt {
+        color: #ffcc00 !important;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Uso de herramientas en fucsia */
+    .tool-use {
+        color: #ff0066 !important;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        padding: 0.3rem 0;
     }
 
     /* Glowing effect for the title */
@@ -417,9 +442,9 @@ def get_agent():
             spotify_available = False
             sp = None
 
-            # Get Spotify credentials from session state (user-provided via sidebar)
-            spotify_client_id = st.session_state.get("spotify_client_id", "")
-            spotify_client_secret = st.session_state.get("spotify_client_secret", "")
+            # Get Spotify credentials from .env
+            spotify_client_id = os.getenv("SPOTIFY_CLIENT_ID", "")
+            spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 
             if spotify_client_id and spotify_client_secret:
                 try:
@@ -724,57 +749,6 @@ with st.sidebar:
 
     st.divider()
 
-    # ─── Spotify Credentials Form ─────────────────────────────────────────────
-    if not st.session_state.get("spotify_available"):
-        with st.expander("🔑 Conectar Spotify", expanded=not st.session_state.get("agent_ready")):
-            st.markdown("""
-            <p style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: #8b949e; line-height: 1.6;">
-                Para reproducir música necesitás una app de
-                <a href="https://developer.spotify.com/dashboard" target="_blank" style="color: #ff0066;">Spotify Developer</a>.<br>
-                Redirect URI: <code>http://127.0.0.1:8000/callback</code>
-            </p>
-            """, unsafe_allow_html=True)
-
-            client_id = st.text_input(
-                "Client ID",
-                value=st.session_state.get("spotify_client_id", ""),
-                type="password",
-                placeholder="tu-spotify-client-id",
-                key="input_client_id",
-            )
-            client_secret = st.text_input(
-                "Client Secret",
-                value=st.session_state.get("spotify_client_secret", ""),
-                type="password",
-                placeholder="tu-spotify-client-secret",
-                key="input_client_secret",
-            )
-
-            if st.button("🔌 Conectar", use_container_width=True, key="btn_connect_spotify"):
-                if client_id and client_secret:
-                    st.session_state["spotify_client_id"] = client_id
-                    st.session_state["spotify_client_secret"] = client_secret
-                    # Force agent re-initialization
-                    if "agent" in st.session_state:
-                        del st.session_state["agent"]
-                    if "agent_ready" in st.session_state:
-                        del st.session_state["agent_ready"]
-                    st.rerun()
-                else:
-                    st.warning("Ingresá ambos campos")
-
-            if st.session_state.get("spotify_error"):
-                st.error(f"Error: {st.session_state['spotify_error']}", icon="⚠️")
-
-        st.divider()
-    else:
-        # Disconnect button
-        if st.button("🔌 Desconectar Spotify", use_container_width=True, key="btn_disconnect"):
-            for key in ["spotify_client_id", "spotify_client_secret", "spotify_available",
-                        "spotify_user", "sp_client", "agent", "agent_ready", "spotify_error"]:
-                st.session_state.pop(key, None)
-            st.rerun()
-
     st.divider()
 
     # ─── Now Playing Widget (auto-refresh every 5s) ─────────────────────────────
@@ -917,47 +891,81 @@ if "messages" not in st.session_state:
 for message in st.session_state["messages"]:
     avatar = "🎵" if message["role"] == "user" else "🤖"
     with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
+        if message["role"] == "user":
+            st.markdown(f'<div class="user-prompt">{message["content"]}</div>', unsafe_allow_html=True)
+        else:
+            # Mostrar herramientas usadas en azul
+            tools_used = message.get("tools_used", [])
+            if tools_used:
+                tools_html = "".join(f'<div class="tool-use">⚙️ Usando herramienta: {t}</div>' for t in tools_used)
+                st.markdown(tools_html, unsafe_allow_html=True)
+            st.markdown(f'<div class="agent-response">{message["content"]}</div>', unsafe_allow_html=True)
 
 # Handle quick prompts
 if "quick_prompt" in st.session_state:
     prompt = st.session_state.pop("quick_prompt")
     st.session_state["messages"].append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="🎵"):
-        st.markdown(prompt)
+        st.markdown(f'<div class="user-prompt">{prompt}</div>', unsafe_allow_html=True)
 
     with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("🎸 Mezclando..."):
+            tools_used = []
             if st.session_state.get("agent_ready"):
                 try:
+                    # Callback para capturar herramientas usadas
+                    def web_callback_handler(**kwargs):
+                        if "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
+                            tool_name = kwargs["current_tool_use"]["name"]
+                            if tool_name not in tools_used:
+                                tools_used.append(tool_name)
+
+                    st.session_state["agent"].callback_handler = web_callback_handler
                     response = st.session_state["agent"](prompt)
                     response_text = str(response)
+                    st.session_state["agent"].callback_handler = None
                 except Exception as e:
                     response_text = f"⚠️ Error del agente: {str(e)}"
             else:
                 response_text = "⚠️ El agente no está disponible. Verifica la conexión con Bedrock."
-        st.markdown(response_text)
-    st.session_state["messages"].append({"role": "assistant", "content": response_text})
+        if tools_used:
+            tools_html = "".join(f'<div class="tool-use">⚙️ Usando herramienta: {t}</div>' for t in tools_used)
+            st.markdown(tools_html, unsafe_allow_html=True)
+        st.markdown(f'<div class="agent-response">{response_text}</div>', unsafe_allow_html=True)
+    st.session_state["messages"].append({"role": "assistant", "content": response_text, "tools_used": tools_used})
     st.rerun()
 
 # Chat input
 if prompt := st.chat_input("Pedí tu playlist, buscá una canción, o decime cómo te sentís... 🎸"):
     st.session_state["messages"].append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="🎵"):
-        st.markdown(prompt)
+        st.markdown(f'<div class="user-prompt">{prompt}</div>', unsafe_allow_html=True)
 
     with st.chat_message("assistant", avatar="🤖"):
         with st.spinner("🎸 Mezclando..."):
+            tools_used = []
             if st.session_state.get("agent_ready"):
                 try:
+                    # Callback para capturar herramientas usadas
+                    def web_callback_handler(**kwargs):
+                        if "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
+                            tool_name = kwargs["current_tool_use"]["name"]
+                            if tool_name not in tools_used:
+                                tools_used.append(tool_name)
+
+                    st.session_state["agent"].callback_handler = web_callback_handler
                     response = st.session_state["agent"](prompt)
                     response_text = str(response)
+                    st.session_state["agent"].callback_handler = None
                 except Exception as e:
                     response_text = f"⚠️ Error del agente: {str(e)}"
             else:
                 response_text = "⚠️ El agente no está disponible. Verifica la conexión con Bedrock."
-        st.markdown(response_text)
-    st.session_state["messages"].append({"role": "assistant", "content": response_text})
+        if tools_used:
+            tools_html = "".join(f'<div class="tool-use">⚙️ Usando herramienta: {t}</div>' for t in tools_used)
+            st.markdown(tools_html, unsafe_allow_html=True)
+        st.markdown(f'<div class="agent-response">{response_text}</div>', unsafe_allow_html=True)
+    st.session_state["messages"].append({"role": "assistant", "content": response_text, "tools_used": tools_used})
     st.rerun()
 
 # Welcome message if no chat history

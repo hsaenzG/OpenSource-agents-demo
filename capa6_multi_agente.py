@@ -32,6 +32,7 @@ El orquestador es un agente que usa otros agentes como herramientas.
 from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.session.file_session_manager import FileSessionManager
+from utils_color import color_callback_handler, print_prompt, print_agent_prefix, print_agent_end, YELLOW, GREEN, RESET
 import json
 import os
 import time
@@ -546,6 +547,7 @@ orquestador = Agent(
 
     Respondes en español.""",
     tools=[consultar_dj_personal, consultar_dj_eventos, consultar_dj_emocional],
+    callback_handler=color_callback_handler,
 )
 
 
@@ -566,16 +568,16 @@ if __name__ == "__main__":
 
     while True:
         try:
-            mensaje = input("🎵 Tú: ").strip()
+            mensaje = input(f"{YELLOW}🎵 Tú: {RESET}").strip()
             if mensaje.lower() in ("salir", "exit", "quit"):
                 print("\n👋 ¡Nos vemos! Que suene buena música.")
                 break
             if not mensaje:
                 continue
 
-            print(f"\n🤖 DJ: ", end="", flush=True)
+            print_agent_prefix()
             orquestador(mensaje)
-            print("\n")
+            print_agent_end()
 
         except KeyboardInterrupt:
             print("\n\n👋 ¡Nos vemos!")

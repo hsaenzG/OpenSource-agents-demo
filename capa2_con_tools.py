@@ -1,5 +1,6 @@
 from strands import Agent, tool
 from strands.models.ollama import OllamaModel
+from utils_color import color_callback_handler, print_prompt, print_agent_prefix, print_agent_end
 import json
 
 # Cargar biblioteca local de canciones
@@ -35,11 +36,12 @@ dj = Agent(
     system_prompt="""Eres un DJ y curador musical experto.
     Usa la herramienta buscar_canciones para encontrar música en la biblioteca del usuario.
     Siempre basa tus recomendaciones en canciones que el usuario realmente tiene.""",
-    tools=[buscar_canciones]
+    tools=[buscar_canciones],
+    callback_handler=color_callback_handler,
 )
 
 prompt = "Quiero escuchar jazz mientras trabajo"
-print(f"\n🎵 Prompt: {prompt}\n")
-print("🤖 DJ: ", end="", flush=True)
+print_prompt(prompt)
+print_agent_prefix()
 dj(prompt)
-print()
+print_agent_end()
