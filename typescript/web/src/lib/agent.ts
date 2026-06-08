@@ -2,7 +2,7 @@
  * DJ Agent — Backend del agente usando Strands SDK + Bedrock
  */
 
-import { Agent, tool } from "@strands-agents/sdk";
+import { Agent, tool, BeforeToolCallEvent } from "@strands-agents/sdk";
 import z from "zod";
 import { BIBLIOTECA } from "./canciones.js";
 
@@ -145,19 +145,19 @@ Respondes en español, con onda y personalidad.`;
 export function registerToolTracking(agent: Agent): Set<string> {
   const toolsUsed = new Set<string>();
 
-  // Usamos un hook simple: sobreescribimos el array interno de hooks
-  // en cada request para rastrear las herramientas usadas.
-  // Como el SDK usa BeforeToolCallEvent, simplemente registramos un hook.
-  try {
-    const { BeforeToolCallEvent } = require("@strands-agents/sdk");
+  const agentAny = agent as any;
+  if (!agentAny._trackingRegistered) {
+    agentAny._toolsUsedRef = toolsUsed;
+    agentAny._trackingRegistered = true;
+
     agent.addHook(BeforeToolCallEvent, (event: any) => {
       const toolName = event?.toolUse?.name;
-      if (toolName) {
-        toolsUsed.add(toolName);
+      if (toolName && agentAny._toolsUsedRef) {
+        agentAny._toolsUsedRef.add(toolName);
       }
     });
-  } catch {
-    // Si no puede registrar hooks, continuar sin tracking
+  } else {
+    agentAny._toolsUsedRef = toolsUsed;
   }
 
   return toolsUsed;
