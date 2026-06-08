@@ -1,0 +1,740 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { BIBLIOTECA } from "../lib/canciones.js";
+
+// Calcular stats
+const generos: Record<string, number> = {};
+const moods: Record<string, number> = {};
+for (const c of BIBLIOTECA) {
+  generos[c.genero] = (generos[c.genero] || 0) + 1;
+  moods[c.mood] = (moods[c.mood] || 0) + 1;
+}
+---
+
+<Layout title="🎸 DJ Agent">
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-emoji">🎸</span>
+        <h2>DJ Agent</h2>
+        <p class="version">v7.0 // astro edition // rock 🤘</p>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Status -->
+      <div class="section">
+        <h4><code>&gt; system_status</code></h4>
+        <p class="status-item">🟢 <code>Agent online</code></p>
+        <p class="status-item">📀 <code>Biblioteca: {BIBLIOTECA.length} tracks</code></p>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Stats -->
+      <div class="section">
+        <h4><code>&gt; biblioteca_stats</code></h4>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value">{Object.keys(generos).length}</span>
+            <span class="stat-label">Géneros</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">{Object.keys(moods).length}</span>
+            <span class="stat-label">Moods</span>
+          </div>
+        </div>
+
+        <details class="expander">
+          <summary>🎵 Géneros</summary>
+          <div class="expander-content">
+            {Object.entries(generos)
+              .sort((a, b) => b[1] - a[1])
+              .map(([g, count]) => (
+                <p class="stat-line">
+                  <code>{"█".repeat(count) + "░".repeat(Math.max(0, 5 - count))}</code> {g} ({count})
+                </p>
+              ))}
+          </div>
+        </details>
+
+        <details class="expander">
+          <summary>🌊 Moods</summary>
+          <div class="expander-content">
+            {Object.entries(moods)
+              .sort((a, b) => b[1] - a[1])
+              .map(([m, count]) => (
+                <p class="stat-line">
+                  <code>{"█".repeat(count) + "░".repeat(Math.max(0, 5 - count))}</code> {m} ({count})
+                </p>
+              ))}
+          </div>
+        </details>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Quick Prompts -->
+      <div class="section">
+        <h4><code>&gt; quick_prompts</code></h4>
+        <div class="quick-prompts">
+          <button class="quick-btn" data-prompt="Rock para programar">🎸 Rock para programar</button>
+          <button class="quick-btn" data-prompt="Playlist de fiesta 1h">🎉 Playlist de fiesta 1h</button>
+          <button class="quick-btn" data-prompt="Algo chill para la noche">🌙 Algo chill para la noche</button>
+          <button class="quick-btn" data-prompt="Estoy melancólico">😢 Estoy melancólico</button>
+          <button class="quick-btn" data-prompt="Máxima energía">⚡ Máxima energía</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <button id="clear-chat" class="clear-btn">🗑️ Limpiar chat</button>
+
+      <div class="sidebar-footer">
+        built with 🤘 + strands + bedrock + astro
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="header">
+        <h1 class="glow-title">🎸 DJ Agent 🤘</h1>
+        <p class="subtitle">// tu DJ personal con IA — estilo dev + rock //</p>
+      </header>
+
+      <!-- Chat Area -->
+      <div id="chat-container" class="chat-container">
+        <!-- Welcome message (shown when no messages) -->
+        <div id="welcome-message" class="welcome-card">
+          <p class="welcome-emoji">🎧</p>
+          <h3>¿Qué escuchamos hoy?</h3>
+          <p class="welcome-text">
+            Soy tu DJ personal con IA. Puedo:<br />
+            <code>→</code> Armar playlists por mood, género o energía<br />
+            <code>→</code> Analizar el flow de tus canciones<br />
+            <code>→</code> Buscar en tu biblioteca local<br />
+            <code>→</code> Sugerir música según cómo te sentís
+          </p>
+          <p class="welcome-hint">// escribí algo abajo o usá los quick prompts del sidebar //</p>
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat-input-wrapper">
+        <form id="chat-form" class="chat-form">
+          <input
+            type="text"
+            id="chat-input"
+            placeholder="Pedí tu playlist, buscá una canción, o decime cómo te sentís... 🎸"
+            autocomplete="off"
+          />
+          <button type="submit" id="send-btn" class="send-btn">
+            <span class="send-icon">▶</span>
+          </button>
+        </form>
+      </div>
+    </main>
+  </div>
+</Layout>
+
+<style>
+  .app-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+    border-right: 1px solid #ff006620;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    overflow-y: auto;
+    gap: 0.5rem;
+  }
+
+  .sidebar-header {
+    text-align: center;
+    padding: 1rem 0;
+  }
+
+  .logo-emoji {
+    font-size: 3rem;
+    display: block;
+  }
+
+  .sidebar-header h2 {
+    margin: 0.5rem 0 0 0;
+    font-size: 1.5rem;
+  }
+
+  .version {
+    color: #8b949e;
+    font-size: 0.7rem;
+    margin-top: 0.3rem;
+  }
+
+  .divider {
+    height: 1px;
+    background: #ff006630;
+    margin: 0.5rem 0;
+  }
+
+  .section h4 {
+    color: #8b949e;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-item {
+    font-size: 0.8rem;
+    color: #8b949e;
+    margin: 0.3rem 0;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 0.6rem;
+    text-align: center;
+  }
+
+  .stat-value {
+    display: block;
+    font-size: 1.2rem;
+    color: #ff0066;
+    font-weight: 700;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .expander {
+    margin: 0.4rem 0;
+  }
+
+  .expander summary {
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #8b949e;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    list-style: none;
+  }
+
+  .expander summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .expander-content {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .stat-line {
+    font-size: 0.75rem;
+    color: #8b949e;
+    margin: 0.2rem 0;
+  }
+
+  .quick-prompts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .quick-btn {
+    background: linear-gradient(135deg, #161b22, #1a1a2e);
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #8b949e;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.75rem;
+    padding: 0.5rem 0.8rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+  }
+
+  .quick-btn:hover {
+    border-color: #ff0066;
+    color: #e6edf3;
+    box-shadow: 0 0 10px #ff006620;
+    transform: translateX(4px);
+  }
+
+  .clear-btn {
+    background: transparent;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    color: #8b949e;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8rem;
+    padding: 0.6rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+  }
+
+  .clear-btn:hover {
+    border-color: #ff0066;
+    color: #ff0066;
+  }
+
+  .sidebar-footer {
+    text-align: center;
+    padding: 1rem 0;
+    color: #30363d;
+    font-size: 0.65rem;
+    margin-top: auto;
+  }
+
+  /* ─── Main Content ─── */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .header {
+    text-align: center;
+    padding: 1.2rem 1rem 0.8rem;
+    flex-shrink: 0;
+  }
+
+  .glow-title {
+    font-size: 2.5rem;
+    text-shadow: 0 0 10px #ff0066, 0 0 20px #ff0066, 0 0 40px #ff006640;
+  }
+
+  .subtitle {
+    color: #8b949e;
+    font-size: 0.85rem;
+    margin-top: 0.3rem;
+  }
+
+  /* ─── Chat ─── */
+  .chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .welcome-card {
+    background: linear-gradient(135deg, #161b22, #1a1a2e);
+    border: 1px solid #30363d;
+    border-radius: 16px;
+    padding: 2rem;
+    margin: auto;
+    max-width: 600px;
+    text-align: center;
+    animation: fadeIn 0.5s ease;
+  }
+
+  .welcome-emoji {
+    font-size: 4rem;
+    margin: 0;
+  }
+
+  .welcome-card h3 {
+    margin: 1rem 0 0.5rem 0;
+    font-size: 1.4rem;
+  }
+
+  .welcome-text {
+    color: #8b949e;
+    font-size: 0.85rem;
+    line-height: 2;
+  }
+
+  .welcome-hint {
+    color: #30363d;
+    font-size: 0.75rem;
+    margin-top: 1.5rem;
+  }
+
+  /* ─── Chat Input ─── */
+  .chat-input-wrapper {
+    padding: 1rem 2rem 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .chat-form {
+    display: flex;
+    gap: 0.5rem;
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 0.5rem;
+    transition: border-color 0.3s ease;
+  }
+
+  .chat-form:focus-within {
+    border-color: #ff0066;
+    box-shadow: 0 0 15px #ff006620;
+  }
+
+  #chat-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e6edf3;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.9rem;
+    padding: 0.5rem;
+  }
+
+  #chat-input::placeholder {
+    color: #8b949e;
+  }
+
+  .send-btn {
+    background: linear-gradient(135deg, #ff0066, #ff6600);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .send-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px #ff006640;
+  }
+
+  .send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+
+<script>
+  // ─── Chat Logic ──────────────────────────────────────────────────────────────
+
+  interface ChatMessage {
+    role: "user" | "assistant";
+    content: string;
+    toolsUsed?: string[];
+  }
+
+  const messages: ChatMessage[] = [];
+  const chatContainer = document.getElementById("chat-container")!;
+  const chatForm = document.getElementById("chat-form") as HTMLFormElement;
+  const chatInput = document.getElementById("chat-input") as HTMLInputElement;
+  const sendBtn = document.getElementById("send-btn") as HTMLButtonElement;
+  const clearBtn = document.getElementById("clear-chat")!;
+  const welcomeMessage = document.getElementById("welcome-message");
+  const quickBtns = document.querySelectorAll(".quick-btn");
+
+  function scrollToBottom() {
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+
+  function hideWelcome() {
+    if (welcomeMessage) {
+      welcomeMessage.style.display = "none";
+    }
+  }
+
+  function createMessageEl(msg: ChatMessage): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = `chat-message ${msg.role}`;
+    wrapper.style.animation = "fadeIn 0.3s ease";
+
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = msg.role === "user" ? "🎵" : "🤖";
+
+    const bubble = document.createElement("div");
+    bubble.className = `bubble ${msg.role}`;
+
+    // Tools used
+    if (msg.toolsUsed && msg.toolsUsed.length > 0) {
+      const toolsDiv = document.createElement("div");
+      toolsDiv.className = "tools-used";
+      toolsDiv.innerHTML = msg.toolsUsed
+        .map((t) => `<span class="tool-tag">⚙️ ${t}</span>`)
+        .join("");
+      bubble.appendChild(toolsDiv);
+    }
+
+    const content = document.createElement("div");
+    content.className = "message-content";
+    content.textContent = msg.content;
+    bubble.appendChild(content);
+
+    wrapper.appendChild(avatar);
+    wrapper.appendChild(bubble);
+    return wrapper;
+  }
+
+  function createLoadingEl(): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "chat-message assistant";
+    wrapper.id = "loading-message";
+    wrapper.style.animation = "fadeIn 0.3s ease";
+
+    const avatar = document.createElement("span");
+    avatar.className = "avatar";
+    avatar.textContent = "🤖";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble assistant loading";
+    bubble.innerHTML = `
+      <div class="loading-indicator">
+        <span class="eq-bars">
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+          <span class="eq-bar"></span>
+        </span>
+        <span class="loading-text">Mezclando...</span>
+      </div>
+    `;
+
+    wrapper.appendChild(avatar);
+    wrapper.appendChild(bubble);
+    return wrapper;
+  }
+
+  function removeLoading() {
+    const el = document.getElementById("loading-message");
+    if (el) el.remove();
+  }
+
+  async function sendMessage(text: string) {
+    if (!text.trim()) return;
+
+    hideWelcome();
+
+    // Add user message
+    const userMsg: ChatMessage = { role: "user", content: text };
+    messages.push(userMsg);
+    chatContainer.appendChild(createMessageEl(userMsg));
+    scrollToBottom();
+
+    // Show loading
+    chatContainer.appendChild(createLoadingEl());
+    scrollToBottom();
+
+    // Disable input
+    chatInput.disabled = true;
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+
+      const data = await res.json();
+      removeLoading();
+
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content: data.response || data.error || "Sin respuesta",
+        toolsUsed: data.toolsUsed || [],
+      };
+      messages.push(assistantMsg);
+      chatContainer.appendChild(createMessageEl(assistantMsg));
+    } catch (err) {
+      removeLoading();
+      const errorMsg: ChatMessage = {
+        role: "assistant",
+        content: "⚠️ Error de conexión con el agente. Verificá que el servidor esté corriendo.",
+      };
+      messages.push(errorMsg);
+      chatContainer.appendChild(createMessageEl(errorMsg));
+    }
+
+    // Re-enable input
+    chatInput.disabled = false;
+    sendBtn.disabled = false;
+    chatInput.focus();
+    scrollToBottom();
+  }
+
+  // Form submit
+  chatForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    if (text) {
+      chatInput.value = "";
+      sendMessage(text);
+    }
+  });
+
+  // Quick prompts
+  quickBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const prompt = (btn as HTMLElement).dataset.prompt;
+      if (prompt) {
+        sendMessage(prompt);
+      }
+    });
+  });
+
+  // Clear chat
+  clearBtn.addEventListener("click", () => {
+    messages.length = 0;
+    chatContainer.innerHTML = "";
+    if (welcomeMessage) {
+      chatContainer.appendChild(welcomeMessage);
+      welcomeMessage.style.display = "";
+    }
+  });
+</script>
+
+<style>
+  /* ─── Chat Messages ─── */
+  .chat-message {
+    display: flex;
+    gap: 0.8rem;
+    align-items: flex-start;
+    max-width: 85%;
+  }
+
+  .chat-message.user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+  }
+
+  .chat-message.assistant {
+    align-self: flex-start;
+  }
+
+  .avatar {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    margin-top: 0.2rem;
+  }
+
+  .bubble {
+    background: #161b2280;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 0.8rem 1rem;
+    backdrop-filter: blur(10px);
+    max-width: 100%;
+  }
+
+  .bubble.user {
+    border-left: 3px solid #ff0066;
+    background: #1a0a2e40;
+  }
+
+  .bubble.assistant {
+    border-left: 3px solid #00ff88;
+  }
+
+  .message-content {
+    font-size: 0.88rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .bubble.user .message-content {
+    color: #ffcc00;
+  }
+
+  .bubble.assistant .message-content {
+    color: #00ff88;
+  }
+
+  .tools-used {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .tool-tag {
+    font-size: 0.72rem;
+    color: #ff0066;
+    background: #ff006610;
+    border: 1px solid #ff006630;
+    border-radius: 4px;
+    padding: 0.15rem 0.4rem;
+  }
+
+  /* Loading */
+  .loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .eq-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+  }
+
+  .eq-bar {
+    width: 3px;
+    background: #ff0066;
+    border-radius: 1px;
+    animation: eqBounce 0.8s ease-in-out infinite alternate;
+  }
+
+  .eq-bar:nth-child(1) {
+    height: 60%;
+    animation-delay: 0s;
+  }
+  .eq-bar:nth-child(2) {
+    height: 100%;
+    animation-delay: 0.2s;
+  }
+  .eq-bar:nth-child(3) {
+    height: 40%;
+    animation-delay: 0.4s;
+  }
+  .eq-bar:nth-child(4) {
+    height: 80%;
+    animation-delay: 0.1s;
+  }
+  .eq-bar:nth-child(5) {
+    height: 50%;
+    animation-delay: 0.3s;
+  }
+
+  .loading-text {
+    color: #8b949e;
+    font-size: 0.8rem;
+    animation: pulse 1.5s infinite;
+  }
+</style>

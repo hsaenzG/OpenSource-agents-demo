@@ -515,7 +515,7 @@ def get_agent():
                     try:
                         dispositivos = sp.devices()
                         if not dispositivos["devices"]:
-                            return "No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo."
+                            return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo."
                         query = f"track:{nombre_cancion}"
                         if artista:
                             query += f" artist:{artista}"
@@ -539,8 +539,12 @@ def get_agent():
                     except Exception as e:
                         error_msg = str(e)
                         if "NO_ACTIVE_DEVICE" in error_msg or "Player command failed" in error_msg:
-                            return "No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo."
-                        return f"Error al reproducir: {error_msg}"
+                            return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo."
+                        if "PREMIUM_REQUIRED" in error_msg:
+                            return "❌ Se requiere Spotify Premium para controlar la reproducción remotamente."
+                        if "403" in error_msg or "Forbidden" in error_msg:
+                            return f"❌ Error de permisos de Spotify. Puede que necesites re-autorizar. Borra el archivo .cache y reinicia la app. Detalle: {error_msg}"
+                        return f"❌ Error al reproducir: {error_msg}"
 
                 @tool
                 def crear_playlist_en_spotify(nombre: str, descripcion: str, canciones_uris: list) -> str:
@@ -913,6 +917,14 @@ if "quick_prompt" in st.session_state:
             tools_used = []
             if st.session_state.get("agent_ready"):
                 try:
+                    # Refrescar token de Spotify si está disponible
+                    sp_client = st.session_state.get("sp_client")
+                    if sp_client:
+                        try:
+                            sp_client.auth_manager.get_access_token(as_dict=False)
+                        except Exception:
+                            pass
+
                     # Callback para capturar herramientas usadas
                     def web_callback_handler(**kwargs):
                         if "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
@@ -946,6 +958,14 @@ if prompt := st.chat_input("Pedí tu playlist, buscá una canción, o decime có
             tools_used = []
             if st.session_state.get("agent_ready"):
                 try:
+                    # Refrescar token de Spotify si está disponible
+                    sp_client = st.session_state.get("sp_client")
+                    if sp_client:
+                        try:
+                            sp_client.auth_manager.get_access_token(as_dict=False)
+                        except Exception:
+                            pass
+
                     # Callback para capturar herramientas usadas
                     def web_callback_handler(**kwargs):
                         if "current_tool_use" in kwargs and kwargs["current_tool_use"].get("name"):
