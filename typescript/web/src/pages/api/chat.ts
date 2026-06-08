@@ -18,11 +18,27 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const agent = getAgent();
+    const agent = await getAgent();
     const toolsUsed = registerToolTracking(agent);
 
     const result = await agent.invoke(message);
-    const responseText = String(result.lastMessage ?? result);
+
+    // Extraer texto de los content blocks del Message
+    const msg = result.lastMessage;
+    let responseText = "";
+    if (msg && typeof msg === "object" && "content" in msg && Array.isArray(msg.content)) {
+      responseText = msg.content
+        .filter((b: any) => b.type === "text" || b.text)
+        .map((b: any) => b.text ?? "")
+        .filter((t: string) => t.trim().length > 0)
+        .join("\n");
+    }
+    if (!responseText) {
+      responseText = String(msg ?? "Sin respuesta del agente.");
+      if (responseText === "[object Object]") {
+        responseText = JSON.stringify(msg);
+      }
+    }
 
     return new Response(
       JSON.stringify({

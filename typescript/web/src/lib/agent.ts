@@ -1,10 +1,18 @@
 /**
- * DJ Agent — Backend del agente usando Strands SDK + Bedrock
+ * DJ Agent — Backend del agente usando Strands SDK + Bedrock + Spotify
  */
 
-import { Agent, tool, BeforeToolCallEvent } from "@strands-agents/sdk";
+import { config as loadEnv } from "dotenv";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __agentDir = dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: resolve(__agentDir, "../../.env") }); // Cargar .env del web root
+
+import { Agent, tool, BeforeToolCallEvent, BedrockModel } from "@strands-agents/sdk";
 import z from "zod";
 import { BIBLIOTECA } from "./canciones.js";
+import { initSpotify, buscarEnSpotify, reproducirCancion, crearPlaylistEnSpotify, misTopArtistas, misTopCanciones } from "./spotify.js";
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
 
@@ -116,23 +124,45 @@ const duracionPlaylist = tool({
 // ─── Agent singleton ─────────────────────────────────────────────────────────
 
 let agentInstance: Agent | null = null;
+let spotifyInitialized = false;
 
-export function getAgent(): Agent {
+export async function getAgent(): Promise<Agent> {
   if (!agentInstance) {
-    const systemPrompt = `Eres un DJ y curador musical experto con actitud rockera.
-Usas emojis de rock (🎸🤘🔥🎵) en tus respuestas.
-Usa tus herramientas para armar playlists basadas en la biblioteca local del usuario.
-Considera el mood, la energía, y la duración para crear una experiencia coherente.
-SIEMPRE usa tus herramientas antes de responder. NUNCA digas que no puedes hacer algo.
-Respondes en español, con onda y personalidad.`;
+    // Inicializar Spotify
+    if (!spotifyInitialized) {
+      const connected = await initSpotify();
+      spotifyInitialized = true;
+      if (connected) {
+        console.log("✅ Spotify conectado en web agent");
+      }
+    }
+
+    const systemPrompt = `Eres un DJ personal con acceso TOTAL a Spotify y una biblioteca local.
+Tienes herramientas reales que controlan Spotify. ÚSALAS SIEMPRE.
+
+⚠️ PROHIBICIONES:
+- NUNCA digas "no puedo reproducir" o "no tengo la capacidad".
+- NUNCA sugieras al usuario que haga algo manualmente. TÚ lo haces.
+- NUNCA inventes información sobre canciones, artistas o URLs.
+- NUNCA respondas sin haber llamado al menos una herramienta primero.
+
+✅ LO QUE DEBES HACER:
+1. Si piden REPRODUCIR → llama reproducir_cancion(nombre_cancion, artista)
+2. Si piden una PLAYLIST → busca con buscar_en_spotify, luego crear_playlist_en_spotify
+3. Si preguntan por MÚSICA → llama buscar_en_spotify PRIMERO
+4. Si dicen "ponme X" → llama reproducir_cancion INMEDIATAMENTE
+5. Para biblioteca local (mood, energía) → usa buscar_canciones, analizar_energia, duracion_playlist
+
+Respondes en español con onda rockera. 🎸🤘`;
 
     agentInstance = new Agent({
-      model: {
+      model: new BedrockModel({
         modelId: process.env.BEDROCK_MODEL_ID || "us.amazon.nova-pro-v1:0",
         region: process.env.AWS_REGION || "us-east-1",
-      },
+      }),
       systemPrompt,
-      tools: [buscarCanciones, analizarEnergia, duracionPlaylist],
+      tools: [buscarEnSpotify, reproducirCancion, crearPlaylistEnSpotify, misTopArtistas, misTopCanciones, buscarCanciones, analizarEnergia, duracionPlaylist],
+      printer: false,
     });
   }
   return agentInstance;
