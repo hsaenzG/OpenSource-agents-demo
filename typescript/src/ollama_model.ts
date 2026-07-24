@@ -8,17 +8,26 @@
  * y corregir el stopReason del modelMessageStopEvent.
  */
 
+import "dotenv/config"; // carga .env para que MODEL_ID esté disponible al construir
 import { VercelModel } from "@strands-agents/sdk/models/vercel";
 import { ollama } from "ai-sdk-ollama";
 import type { Message } from "@strands-agents/sdk";
+import { appendFile, writeFile } from "fs/promises";
 
 type ModelStreamEvent = any;
 
+// Espía de eventos: prende con DEBUG_EVENTS=1 npm run capaX
+const DEBUG_EVENTS = process.env.DEBUG_EVENTS === "1";
+
 /**
  * Modelo Ollama compatible con Strands que corrige los eventos faltantes del stream.
+ * https://strandsagents.com/docs/user-guide/concepts/model-providers/custom_model_provider/
  */
 export class OllamaModel extends VercelModel {
-  constructor(modelId: string, host: string = "http://localhost:11434") {
+  constructor(
+    modelId: string = process.env.MODEL_ID ?? "llama3.1:8b",
+    host: string = process.env.OLLAMA_HOST ?? "http://localhost:11434"
+  ) {
     super({ provider: (ollama as any)(modelId, { baseURL: host }) });
   }
 
@@ -29,7 +38,7 @@ export class OllamaModel extends VercelModel {
    */
   override async *stream(
     messages: Message[],
-    options?: any
+    options?: any,
   ): AsyncGenerator<ModelStreamEvent> {
     const parentStream = super.stream(messages, options) as any;
     let hasMessageStart = false;
@@ -40,6 +49,8 @@ export class OllamaModel extends VercelModel {
       if (done) break;
 
       const event = value as any;
+      if (DEBUG_EVENTS)
+        await appendFile("test.txt", `${JSON.stringify(event)}\n`);
 
       // Inject modelMessageStartEvent before the first content block if missing
       if (!hasMessageStart && event?.type === "modelContentBlockStartEvent") {
@@ -48,7 +59,10 @@ export class OllamaModel extends VercelModel {
       }
 
       // Track tool use
-      if (event?.type === "modelContentBlockStartEvent" && event.start?.type === "toolUseStart") {
+      if (
+        event?.type === "modelContentBlockStartEvent" &&
+        event.start?.type === "toolUseStart"
+      ) {
         hasToolUse = true;
       }
 

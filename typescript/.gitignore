@@ -4,3 +4,4 @@ dist/
 sesiones/
 .cache
 .spotify_token.json
+test.txt

@@ -10,7 +10,7 @@
  */
 
 import { Agent, configureLogging } from "@strands-agents/sdk";
-import { OllamaModel } from "./ollama_model.js";
+import { createModel } from "./create_model.js";
 import { printPrompt, printAgentPrefix, printAgentEnd } from "./utils_color.js";
 
 // Suprimir warnings del SDK (finish_reason undefined de Ollama)
@@ -21,7 +21,7 @@ configureLogging({
   error: console.error,
 });
 
-const modelo = new OllamaModel("llama3.1");
+const modelo = createModel(); // proveedor y modelo vienen del .env
 
 const dj = new Agent({
   model: modelo,

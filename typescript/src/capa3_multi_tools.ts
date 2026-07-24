@@ -12,7 +12,7 @@
  */
 
 import { Agent, tool, configureLogging } from "@strands-agents/sdk";
-import { OllamaModel } from "./ollama_model.js";
+import { createModel } from "./create_model.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -165,7 +165,7 @@ const duracionPlaylist = tool({
 
 // ─── Agente ──────────────────────────────────────────────────────────────────
 
-const modelo = new OllamaModel("llama3.1");
+const modelo = createModel(); // proveedor y modelo vienen del .env
 
 const dj = new Agent({
   model: modelo,

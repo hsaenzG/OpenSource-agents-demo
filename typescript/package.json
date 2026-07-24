@@ -4,25 +4,24 @@
   "description": "🎧 DJ Agent — Agente de IA desde cero con TypeScript y Strands Agents SDK",
   "type": "module",
   "scripts": {
-    "capa1": "npx tsx src/capa1_agente_basico.ts",
-    "capa2": "npx tsx src/capa2_con_tools.ts",
-    "capa3": "npx tsx src/capa3_multi_tools.ts",
-    "capa4": "npx tsx src/capa4_memoria.ts",
-    "capa5": "npx tsx src/capa5_spotify.ts",
-    "capa6": "npx tsx src/capa6_multi_agente.ts"
+    "capa1": "tsx src/capa1_agente_basico.ts",
+    "capa2": "tsx src/capa2_con_tools.ts",
+    "capa3": "tsx src/capa3_multi_tools.ts",
+    "capa4": "tsx src/capa4_memoria.ts",
+    "capa5": "tsx src/capa5_spotify.ts",
+    "capa6": "tsx src/capa6_multi_agente.ts"
   },
   "dependencies": {
-    "@strands-agents/sdk": "^1.0.0",
-    "ai-sdk-ollama": "^1.0.0",
-    "dotenv": "^16.4.0",
-    "spotify-web-api-node": "^5.0.2",
-    "readline": "^1.3.0",
-    "zod": "^4.1.12"
+    "@ai-sdk/provider": "3.0.14",
+    "@strands-agents/sdk": "1.4.0",
+    "ai-sdk-ollama": "1.1.0",
+    "dotenv": "16.6.1",
+    "readline": "1.3.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/spotify-web-api-node": "^5.0.11",
-    "typescript": "^5.6.0",
-    "tsx": "^4.19.0"
+    "@types/node": "22.19.20",
+    "typescript": "5.9.3",
+    "tsx": "4.22.4"
   }
 }

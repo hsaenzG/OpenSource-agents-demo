@@ -11,7 +11,7 @@
  */
 
 import { Agent, tool, configureLogging } from "@strands-agents/sdk";
-import { OllamaModel } from "./ollama_model.js";
+import { createModel } from "./create_model.js";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -182,7 +182,7 @@ const duracionPlaylist = tool({
 
 const sessionManager = new FileSessionManager("usuario-1");
 
-const modelo = new OllamaModel("llama3.1");
+const modelo = createModel(); // proveedor y modelo vienen del .env
 
 // Construir system prompt con contexto de la sesión
 const historialPrevio = sessionManager.getContextSummary();
