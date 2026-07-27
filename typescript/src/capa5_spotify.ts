@@ -17,15 +17,15 @@ import { createModel } from "./create_model.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { createInterface } from "readline";
+import { createInterface } from "node:readline/promises";
 import z from "zod";
-import { config } from "dotenv";
 import type { SpotifyClient } from "./spotify_client.js";
+import { conFiltroDeAnios } from "./spotify_client.js";
 import { authenticateSpotify } from "./spotify_auth.js";
-import { GREEN, YELLOW, RESET, printAgentPrefix, printAgentEnd, registerColorHooks } from "./utils_color.js";
+import { YELLOW, RESET, streamColored } from "./utils_color.js";
 
+// El .env lo carga create_model.js (import "dotenv/config") al importarse.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../.env") });
 
 interface Cancion {
   titulo: string;
@@ -321,8 +321,8 @@ Respondes en español, con onda y buen gusto musical. 🎸🤘`,
     misTopArtistas,
     misTopCanciones,
   ],
+  printer: false, // manejamos la salida a mano con streamColored
 });
-await registerColorHooks(dj);
 
 // ─── Conversación interactiva ────────────────────────────────────────────────
 
@@ -330,29 +330,27 @@ console.log("\n🎧 DJ Personal con Spotify");
 console.log("=".repeat(50));
 console.log("Escribe tu mensaje (o 'salir' para terminar)\n");
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-const askQuestion = (): void => {
-  rl.question(`${YELLOW}🎵 Tú: ${RESET}`, async (mensaje) => {
-    if (!mensaje || mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) {
-      console.log("\n👋 ¡Nos vemos! Que suene buena música.");
-      rl.close();
-      return;
-    }
+while (true) {
+  let mensaje: string;
+  try {
+    mensaje = (await rl.question(`${YELLOW}🎵 Tú: ${RESET}`)).trim();
+  } catch (error: any) {
+    // Ctrl+C (SIGINT) hace que readline aborte la pregunta. Salimos limpio.
+    if (error?.code === "ABORT_ERR") break;
+    throw error;
+  }
 
-    printAgentPrefix();
-    try {
-      await dj.invoke(mensaje);
-    } catch (e: any) {
-      console.log(`\n⚠️ Error: ${e.message}`);
-    }
-    printAgentEnd();
+  if (mensaje === "") continue;
+  if (mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) break;
 
-    askQuestion();
-  });
-};
+  try {
+    await streamColored(dj, mensaje);
+  } catch (e: any) {
+    console.log(`\n⚠️ Error: ${e.message}`);
+  }
+}
 
-askQuestion();
+console.log("\n👋 ¡Nos vemos! Que suene buena música.");
+rl.close();

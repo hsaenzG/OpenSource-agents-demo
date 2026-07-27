@@ -37,22 +37,15 @@ import { createModel } from "./create_model.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { createInterface } from "readline";
+import { createInterface } from "node:readline/promises";
 import z from "zod";
-import { config } from "dotenv";
 import type { SpotifyClient } from "./spotify_client.js";
+import { conFiltroDeAnios } from "./spotify_client.js";
 import { authenticateSpotify } from "./spotify_auth.js";
-import {
-  GREEN,
-  YELLOW,
-  RESET,
-  printAgentPrefix,
-  printAgentEnd,
-  registerColorHooks,
-} from "./utils_color.js";
+import { YELLOW, RESET, streamColored } from "./utils_color.js";
 
+// El .env lo carga create_model.js (import "dotenv/config") al importarse.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../.env") });
 
 interface Cancion {
   titulo: string;
@@ -496,6 +489,8 @@ USA los queries_spotify devueltos para buscar canciones con buscar_en_spotify.`,
 const modelo = createModel(); // proveedor y modelo vienen del .env
 
 const djPersonal = new Agent({
+  name: "dj_personal",
+  description: "DJ personal experto en gustos musicales y recomendaciones.",
   model: modelo,
   systemPrompt: `Eres un DJ personal experto. Conoces los gustos del usuario.
 SIEMPRE usa buscar_en_spotify antes de recomendar. NUNCA inventes datos.
@@ -510,6 +505,8 @@ Respondes en español, con onda.`,
 });
 
 const djEventos = new Agent({
+  name: "dj_eventos",
+  description: "DJ profesional para armar playlists de eventos con duración.",
   model: modelo,
   systemPrompt: `Eres un DJ profesional de eventos. Armas playlists para fiestas, bodas, cenas.
 SIEMPRE usa buscar_en_spotify. Usa planificar_evento para estructurar la playlist.
@@ -525,6 +522,8 @@ Verifica que la duración cubra el evento. Respondes en español.`,
 });
 
 const djEmocional = new Agent({
+  name: "dj_emocional",
+  description: "DJ empático especializado en emociones y estados de ánimo.",
   model: modelo,
   systemPrompt: `Eres un DJ empático especializado en emociones y música.
 
@@ -546,82 +545,29 @@ Eres sensible y no juzgas. Respondes en español con calidez.`,
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// TOOLS DEL ORQUESTADOR — Cada sub-agente se expone como un tool
+// TOOLS DEL ORQUESTADOR — Cada sub-agente se expone como un tool con asTool()
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * Extrae el texto legible del resultado de un agente.
- */
-function extractText(result: any): string {
-  // result.lastMessage puede ser: string, Message object, o undefined
-  const msg = result?.lastMessage;
-  if (!msg) return "(sin respuesta del sub-agente)";
-  if (typeof msg === "string") return msg;
+// asTool() envuelve el agente como herramienta: invoca al sub-agente, extrae el
+// texto de la respuesta y arranca conversación fresca en cada llamada
+// (preserveContext: false por default). Adiós al extractText y al invoke manual.
 
-  // Message object con content blocks
-  if (msg.content && Array.isArray(msg.content)) {
-    const texts = msg.content
-      .filter((b: any) => b.type === "text" || b.text)
-      .map((b: any) => b.text ?? "")
-      .filter((t: string) => t.trim().length > 0);
-    if (texts.length > 0) return texts.join("\n");
-  }
-
-  // Fallback: intentar toString o JSON
-  const str = String(msg);
-  if (str && str !== "[object Object]") return str;
-
-  // Último recurso: serializar todo el result
-  try {
-    return JSON.stringify(msg, null, 2);
-  } catch {
-    return "(no se pudo leer la respuesta del sub-agente)";
-  }
-}
-
-const consultarDjPersonal = tool({
+const consultarDjPersonal = djPersonal.asTool({
   name: "consultar_dj_personal",
   description: `Delega al DJ Personal: experto en gustos musicales y recomendaciones personalizadas.
 Úsalo cuando el usuario quiera recomendaciones, descubrir música nueva, o reproduzca algo.`,
-  inputSchema: z.object({
-    mensaje: z
-      .string()
-      .describe("El mensaje completo del usuario para el DJ Personal"),
-  }),
-  callback: async (input) => {
-    const result = await djPersonal.invoke(input.mensaje);
-    return extractText(result);
-  },
 });
 
-const consultarDjEventos = tool({
+const consultarDjEventos = djEventos.asTool({
   name: "consultar_dj_eventos",
   description: `Delega al DJ de Eventos: experto en armar playlists para ocasiones específicas.
 Úsalo cuando el usuario mencione un evento, fiesta, boda, cena o pida una playlist con duración.`,
-  inputSchema: z.object({
-    mensaje: z
-      .string()
-      .describe("El mensaje completo del usuario para el DJ de Eventos"),
-  }),
-  callback: async (input) => {
-    const result = await djEventos.invoke(input.mensaje);
-    return extractText(result);
-  },
 });
 
-const consultarDjEmocional = tool({
+const consultarDjEmocional = djEmocional.asTool({
   name: "consultar_dj_emocional",
   description: `Delega al DJ Emocional: experto en música y estados de ánimo.
 Úsalo cuando el usuario exprese cómo se siente o quiera música para acompañar un estado de ánimo.`,
-  inputSchema: z.object({
-    mensaje: z
-      .string()
-      .describe("El mensaje completo del usuario para el DJ Emocional"),
-  }),
-  callback: async (input) => {
-    const result = await djEmocional.invoke(input.mensaje);
-    return extractText(result);
-  },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -656,8 +602,8 @@ REGLAS:
 
 Respondes en español con onda rockera. 🎸🤘`,
   tools: [consultarDjPersonal, consultarDjEventos, consultarDjEmocional],
+  printer: false, // manejamos la salida a mano con streamColored
 });
-await registerColorHooks(orquestador);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INTERFAZ DE CONSOLA
@@ -673,25 +619,23 @@ console.log("  • 'Arma una playlist de 2h para una cena' → DJ Eventos");
 console.log("  • 'Estoy triste, ponme algo' → DJ Emocional");
 console.log("\nEscribe 'salir' para terminar.\n");
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-const askQuestion = (): void => {
-  rl.question(`${YELLOW}🎵 Tú: ${RESET}`, async (mensaje) => {
-    if (!mensaje || mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) {
-      console.log("\n👋 ¡Nos vemos! Que suene buena música.");
-      rl.close();
-      return;
-    }
+while (true) {
+  let mensaje: string;
+  try {
+    mensaje = (await rl.question(`${YELLOW}🎵 Tú: ${RESET}`)).trim();
+  } catch (error: any) {
+    // Ctrl+C (SIGINT) hace que readline aborte la pregunta. Salimos limpio.
+    if (error?.code === "ABORT_ERR") break;
+    throw error;
+  }
 
-    printAgentPrefix();
-    await orquestador.invoke(mensaje);
-    printAgentEnd();
+  if (mensaje === "") continue;
+  if (mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) break;
 
-    askQuestion();
-  });
-};
+  await streamColored(orquestador, mensaje);
+}
 
-askQuestion();
+console.log("\n👋 ¡Nos vemos! Que suene buena música.");
+rl.close();

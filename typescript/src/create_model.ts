@@ -8,8 +8,12 @@
  */
 
 import "dotenv/config"; // carga .env antes de leer process.env
-import { BedrockModel } from "@strands-agents/sdk";
+import { BedrockModel, configureLogging } from "@strands-agents/sdk";
 import { OllamaModel } from "./ollama_model.js";
+
+// Silencia los warnings del SDK (finish_reason undefined de Ollama). Se hace una
+// sola vez aquí, en el punto de entrada común de todas las capas.
+configureLogging({ debug: () => {}, info: () => {}, warn: () => {}, error: console.error });
 
 export function createModel() {
   const provider = (process.env.MODEL_PROVIDER ?? "ollama").toLowerCase();

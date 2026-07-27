@@ -8,16 +8,13 @@
  *   - Modelo llama3.1 descargado
  */
 
-import { Agent, tool, configureLogging } from "@strands-agents/sdk";
+import { Agent, tool } from "@strands-agents/sdk";
 import { createModel } from "./create_model.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import z from "zod";
-import { printPrompt, printAgentPrefix, printAgentEnd, registerColorHooks } from "./utils_color.js";
-
-// Suprimir warnings del SDK (finish_reason undefined de Ollama)
-configureLogging({ debug: () => {}, info: () => {}, warn: () => {}, error: console.error });
+import { printPrompt, streamColored } from "./utils_color.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -89,11 +86,9 @@ const dj = new Agent({
 Usa la herramienta buscar_canciones para encontrar música en la biblioteca del usuario.
 Siempre basa tus recomendaciones en canciones que el usuario realmente tiene.`,
   tools: [buscarCanciones],
+  printer: false, // manejamos la salida a mano con streamColored
 });
-await registerColorHooks(dj);
 
 const prompt = "Quiero escuchar jazz mientras trabajo";
 printPrompt(prompt);
-printAgentPrefix();
-await dj.invoke(prompt);
-printAgentEnd();
+await streamColored(dj, prompt);

@@ -2,24 +2,23 @@
  * Capa 4 — Memoria (Sesiones persistentes)
  *
  * Concepto nuevo: persistencia de conversaciones.
- * El agente recuerda los gustos del usuario entre mensajes.
- * Las sesiones se guardan en disco como archivos JSON.
+ * El agente recuerda los gustos del usuario entre mensajes y entre ejecuciones.
+ * Usa el SessionManager nativo del SDK, que persiste la conversación en disco
+ * (FileStorage) y la restaura al arrancar.
  *
  * Requisitos:
  *   - Ollama corriendo en localhost:11434
  *   - Modelo llama3.1 descargado
  */
 
-import { Agent, tool, configureLogging } from "@strands-agents/sdk";
+import { createInterface } from "node:readline/promises";
+import { Agent, tool, SessionManager, FileStorage } from "@strands-agents/sdk";
 import { createModel } from "./create_model.js";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import z from "zod";
-import { GREEN, MAGENTA, RESET, printPrompt, printAgentPrefix, printAgentEnd, registerColorHooks } from "./utils_color.js";
-
-// Suprimir warnings del SDK (finish_reason undefined de Ollama)
-configureLogging({ debug: () => {}, info: () => {}, warn: () => {}, error: console.error });
+import { printPrompt, streamColored } from "./utils_color.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -35,53 +34,6 @@ interface Cancion {
 const BIBLIOTECA: Cancion[] = JSON.parse(
   readFileSync(resolve(__dirname, "../data/canciones.json"), "utf-8")
 );
-
-// ─── Session Manager simple (archivo JSON) ───────────────────────────────────
-
-interface Message {
-  role: string;
-  content: string;
-}
-
-class FileSessionManager {
-  private sessionPath: string;
-  private messages: Message[] = [];
-
-  constructor(sessionId: string, storageDir: string = "./sesiones") {
-    const baseDir = resolve(__dirname, "..", storageDir);
-    if (!existsSync(baseDir)) {
-      mkdirSync(baseDir, { recursive: true });
-    }
-    this.sessionPath = resolve(baseDir, `session_${sessionId}.json`);
-    this.load();
-  }
-
-  private load(): void {
-    if (existsSync(this.sessionPath)) {
-      const data = readFileSync(this.sessionPath, "utf-8");
-      this.messages = JSON.parse(data);
-    }
-  }
-
-  save(): void {
-    writeFileSync(this.sessionPath, JSON.stringify(this.messages, null, 2));
-  }
-
-  addMessage(role: string, content: string): void {
-    this.messages.push({ role, content });
-    this.save();
-  }
-
-  getMessages(): Message[] {
-    return this.messages;
-  }
-
-  getContextSummary(): string {
-    if (this.messages.length === 0) return "";
-    const lastMessages = this.messages.slice(-10);
-    return lastMessages.map((m) => `${m.role}: ${m.content}`).join("\n");
-  }
-}
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
 
@@ -180,46 +132,50 @@ const duracionPlaylist = tool({
 
 // ─── Agente con memoria ──────────────────────────────────────────────────────
 
-const sessionManager = new FileSessionManager("usuario-1");
-
 const modelo = createModel(); // proveedor y modelo vienen del .env
 
-// Construir system prompt con contexto de la sesión
-const historialPrevio = sessionManager.getContextSummary();
-const contextoPrevio = historialPrevio
-  ? `\n\nHistorial previo de conversación con este usuario:\n${historialPrevio}`
-  : "";
+// SessionManager nativo del SDK: persiste la conversación completa en disco y la
+// restaura al arrancar. El agente recupera su array de mensajes real (con roles),
+// no un resumen pegado al system prompt. Guarda tras cada invoke por defecto.
+const sessionManager = new SessionManager({
+  sessionId: "usuario-1",
+  storage: { snapshot: new FileStorage(resolve(__dirname, "../sesiones")) },
+});
 
 const dj = new Agent({
   model: modelo,
   systemPrompt: `Eres un DJ y curador musical experto.
 Recuerdas los gustos del usuario entre conversaciones.
 Si el usuario ya te dijo qué le gusta, úsalo para personalizar tus playlists.
-Usa tus herramientas para buscar en la biblioteca real del usuario.${contextoPrevio}`,
+Usa tus herramientas para buscar en la biblioteca real del usuario.`,
   tools: [buscarCanciones, analizarEnergia, duracionPlaylist],
+  sessionManager,
+  printer: false, // manejamos la salida a mano con streamColored
 });
-await registerColorHooks(dj);
 
-// ─── Primera conversación ────────────────────────────────────────────────────
+// ─── Loop interactivo — el agente recuerda entre mensajes y entre ejecuciones ─
 
-const prompt1 = "Me encanta el indie rock y el rock en español y rock clásico.";
-printPrompt(prompt1);
-printAgentPrefix();
-const result1 = await dj.invoke(prompt1);
-printAgentEnd();
+const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-sessionManager.addMessage("user", prompt1);
-sessionManager.addMessage("assistant", String(result1.lastMessage ?? ""));
+console.log('🎧 Habla con el DJ. Recuerda tus gustos entre mensajes. Escribe "salir" para terminar.');
 
-console.log();
+while (true) {
+  let prompt: string;
+  try {
+    prompt = (await rl.question("\n🎵 Tú: ")).trim();
+  } catch (error: any) {
+    // Ctrl+C (SIGINT) hace que readline aborte la pregunta. Salimos limpio.
+    if (error?.code === "ABORT_ERR") break;
+    throw error;
+  }
 
-// ─── Segunda conversación — el agente debería recordar los gustos ────────────
+  if (prompt === "") continue;
+  if (prompt.toLowerCase() === "salir") break;
 
-const prompt2 = "Armame algo para el viernes";
-printPrompt(prompt2);
-printAgentPrefix();
-const result2 = await dj.invoke(prompt2);
-printAgentEnd();
+  printPrompt(prompt);
+  await streamColored(dj, prompt);
+  // No guardamos a mano: el SessionManager persiste la conversación tras cada invoke/stream.
+}
 
-sessionManager.addMessage("user", prompt2);
-sessionManager.addMessage("assistant", String(result2.lastMessage ?? ""));
+console.log("\n👋 ¡Nos vemos! Tus gustos quedaron guardados.");
+rl.close();
