@@ -87,20 +87,42 @@ if (clientId && clientSecret) {
 
 const buscarEnSpotify = tool({
   name: "buscar_en_spotify",
-  description:
-    "Busca canciones en Spotify. SIEMPRE úsala antes de responder sobre música.",
+  description: `Busca canciones en Spotify. SIEMPRE úsala antes de responder sobre música.
+
+Para VARIEDAD, haz varias búsquedas distintas en vez de una genérica. El query
+acepta filtros: "genre:house", "genre:deep-house year:2018-2024", "artist:Disclosure".
+Para una progresión de energía (DJ set que sube de tranquilo a intenso), busca por
+subgéneros de menor a mayor energía en llamadas separadas: deep/melodic house →
+progressive house → tech house → peak-time. Spotify ya no expone el BPM por track a
+estas apps, así que ordena por subgénero y energía, no por un BPM exacto.
+Para acotar por época usa 'anio_inicio' y 'anio_fin' (NO escribas year: en el query).
+Usa 'limite' alto (30-50) para más opciones y 'offset' para paginar y variar.`,
   inputSchema: z.object({
-    query: z.string().describe("Texto de búsqueda"),
+    query: z.string().describe("Texto de búsqueda, admite filtros genre:/artist:"),
     limite: z.coerce
       .number()
       .optional()
-      .describe("Máximo de resultados (default: 10)"),
+      .describe("Máximo de resultados, hasta 50 (default: 20)"),
+    offset: z.coerce
+      .number()
+      .optional()
+      .describe("Desde qué resultado empezar, para paginar y variar (default: 0)"),
+    anio_inicio: z.coerce
+      .number()
+      .optional()
+      .describe("Año inicial del rango, ej. 2015"),
+    anio_fin: z.coerce
+      .number()
+      .optional()
+      .describe("Año final del rango, ej. 2024"),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
-    const limite = Math.min(Math.max(input.limite ?? 10, 1), 10);
+    const limite = Math.min(Math.max(input.limite ?? 20, 1), 50);
+    const offset = Math.max(input.offset ?? 0, 0);
+    const query = conFiltroDeAnios(input.query, input.anio_inicio, input.anio_fin);
     try {
-      const tracks = await sp.searchTracks(input.query, limite);
+      const tracks = await sp.searchTracks(query, limite, offset);
       if (tracks.length === 0)
         return `No encontré canciones en Spotify para: ${input.query}`;
       return JSON.stringify(

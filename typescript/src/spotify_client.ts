@@ -52,6 +52,27 @@ interface SpotifyClientOptions {
   onTokenRefresh?: (accessToken: string, expiresAt: number) => void;
 }
 
+/**
+ * Agrega el filtro `year:` de Spotify a un query según el rango de años.
+ * Acepta que venga solo el inicio, solo el fin, o ambos. Si no viene ninguno,
+ * devuelve el query tal cual. Ordena los años por si llegan al revés.
+ *
+ *   conFiltroDeAnios("deep house", 2018, 2024) → "deep house year:2018-2024"
+ *   conFiltroDeAnios("techno", 2020)           → "techno year:2020"
+ */
+export function conFiltroDeAnios(
+  query: string,
+  anioInicio?: number,
+  anioFin?: number,
+): string {
+  if (!anioInicio && !anioFin) return query;
+  const inicio = anioInicio ?? anioFin!;
+  const fin = anioFin ?? anioInicio!;
+  const [desde, hasta] = inicio <= fin ? [inicio, fin] : [fin, inicio];
+  const filtro = desde === hasta ? `year:${desde}` : `year:${desde}-${hasta}`;
+  return `${query} ${filtro}`.trim();
+}
+
 export class SpotifyClient {
   private accessToken: string;
   private expiresAt: number;
@@ -154,9 +175,30 @@ export class SpotifyClient {
     return this.request<SpotifyUser>("/me");
   }
 
-  async searchTracks(query: string, limit = 10): Promise<SpotifyTrack[]> {
+  /**
+   * Busca tracks. `limit` puede ser hasta 50 (máximo de Spotify) y `offset`
+   * permite paginar para traer resultados distintos en llamadas sucesivas.
+   * `market` acota al catálogo de un país (p. ej. "MX"), lo que cambia y
+   * amplía la variedad de lo que devuelve.
+   *
+   * El `query` acepta la sintaxis de filtros de Spotify:
+   *   "deep house genre:house year:2018-2024"
+   */
+  async searchTracks(
+    query: string,
+    limit = 10,
+    offset = 0,
+    market?: string,
+  ): Promise<SpotifyTrack[]> {
+    const params: Record<string, string | number> = {
+      q: query,
+      type: "track",
+      limit: Math.min(Math.max(limit, 1), 50),
+      offset: Math.min(Math.max(offset, 0), 1000),
+    };
+    if (market) params.market = market;
     const data = await this.request<{ tracks: { items: SpotifyTrack[] } }>("/search", {
-      query: { q: query, type: "track", limit },
+      query: params,
     });
     return data.tracks?.items ?? [];
   }

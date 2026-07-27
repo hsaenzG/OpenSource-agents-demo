@@ -65,19 +65,41 @@ if (clientId && clientSecret) {
 
 const buscarEnSpotify = tool({
   name: "buscar_en_spotify",
-  description: `Busca canciones en Spotify por nombre, artista o género.
-SIEMPRE usa esta herramienta cuando el usuario pregunte por canciones, artistas o música.`,
+  description: `Busca canciones en Spotify. SIEMPRE úsala cuando el usuario pregunte por música.
+
+Para tener VARIEDAD, no hagas una sola búsqueda genérica. Haz VARIAS búsquedas
+distintas y combina los resultados. El query acepta los filtros de Spotify:
+  - genre:  → "genre:house", "genre:deep-house", "genre:techno"
+  - year:   → "genre:house year:2018-2024"
+  - artist: → "artist:Disclosure"
+
+Para armar una progresión de energía (por ejemplo un DJ set que sube de tranquilo
+a intenso), busca por subgéneros de menor a mayor energía en llamadas separadas:
+  deep house / melodic house → progressive house → tech house → peak-time.
+Nota: Spotify ya no expone el BPM por track a estas apps, así que ordena por
+subgénero y energía, no por un número de BPM exacto.
+
+Para acotar por época, usa los parámetros 'anio_inicio' y 'anio_fin' (NO escribas
+year: en el query, la herramienta arma el filtro sola).
+
+Usa 'limite' alto (30-50) cuando quieras muchas opciones, y 'offset' para pedir
+resultados distintos de una misma búsqueda (offset:20 trae los siguientes 20).`,
   inputSchema: z.object({
-    query: z.string().describe("Texto de búsqueda"),
-    limite: z.number().default(10).describe("Número máximo de resultados (default: 10)"),
+    query: z.string().describe("Texto de búsqueda, admite filtros genre:/artist:"),
+    limite: z.number().default(20).describe("Máximo de resultados, hasta 50 (default: 20)"),
+    offset: z.number().default(0).describe("Desde qué resultado empezar, para paginar y variar (default: 0)"),
+    anio_inicio: z.number().optional().describe("Año inicial del rango, ej. 2015"),
+    anio_fin: z.number().optional().describe("Año final del rango, ej. 2024"),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) {
       return "Spotify no está conectado.";
     }
-    const limite = Math.min(Math.max(input.limite ?? 10, 1), 10);
+    const limite = Math.min(Math.max(input.limite ?? 20, 1), 50);
+    const offset = Math.max(input.offset ?? 0, 0);
+    const query = conFiltroDeAnios(input.query, input.anio_inicio, input.anio_fin);
     try {
-      const tracks = await sp.searchTracks(input.query, limite);
+      const tracks = await sp.searchTracks(query, limite, offset);
       if (tracks.length === 0) {
         return `No encontré canciones en Spotify para: ${input.query}`;
       }
