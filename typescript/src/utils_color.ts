@@ -19,48 +19,56 @@ export function printPrompt(prompt: string): void {
   console.log(`\n${YELLOW}🎵 Prompt: ${prompt}${RESET}\n`);
 }
 
-export function printAgentPrefix(): void {
-  process.stdout.write(`${GREEN}🤖 DJ: `);
-}
-
-export function printAgentEnd(): void {
-  console.log(`${RESET}`);
-}
-
 /**
- * Color printer para Strands Agents SDK (TypeScript).
- * Imprime texto del agente en verde y tool calls en fucsia.
+ * Recorre el stream del agente y colorea la salida a mano:
+ *   - texto de la respuesta en verde (textDelta, conforme va llegando)
+ *   - anuncio de herramientas en fucsia (beforeToolCallEvent)
  *
- * Se pasa como `printer` al Agent:
- *   new Agent({ ..., printer: colorPrinter })
+ * El SDK no deja inyectar un Printer custom (la opción `printer` del Agent es
+ * boolean, y ni Printer ni AgentPrinter se exportan). Por eso ponemos
+ * `printer: false` en el Agent y manejamos nosotros el stream aquí.
+ *
+ * Devuelve el AgentResult final (el valor de retorno del generador).
+ *
+ *   const dj = new Agent({ ..., printer: false });
+ *   const result = await streamColored(dj, "hola");
  */
-export const colorPrinter = {
-  write(text: string): void {
-    process.stdout.write(`${GREEN}${text}${RESET}`);
-  },
-};
+export async function streamColored(
+  agent: { stream: (message: string) => AsyncGenerator<any, any, unknown> },
+  message: string,
+): Promise<any> {
+  process.stdout.write(`${GREEN}🤖 DJ: `);
 
-/**
- * Registra hooks de color en un agente para mostrar tool calls en fucsia.
- * Llámalo después de crear el agente:
- *   const dj = new Agent({ ... });
- *   registerColorHooks(dj);
- */
-export async function registerColorHooks(agent: any): Promise<void> {
-  const { BeforeToolCallEvent, AfterToolCallEvent } = await import("@strands-agents/sdk");
-  let lastTool = "";
-
-  agent.addHook(BeforeToolCallEvent, (event: any) => {
-    const toolName = event?.toolUse?.name ?? "unknown";
-    if (lastTool !== toolName) {
-      lastTool = toolName;
-      process.stdout.write(`\n${MAGENTA}⚙️  Usando herramienta: ${toolName}${RESET}\n`);
+  const iterator = agent.stream(message);
+  while (true) {
+    const { value, done } = await iterator.next();
+    if (done) {
+      process.stdout.write(`${RESET}\n`);
+      return value; // AgentResult
     }
-  });
 
-  agent.addHook(AfterToolCallEvent, () => {
-    lastTool = "";
-  });
+    const event = value as any;
+
+    // Texto de la respuesta, conforme va llegando del modelo
+    if (event.type === "modelStreamUpdateEvent") {
+      const inner = event.event;
+      if (
+        inner?.type === "modelContentBlockDeltaEvent" &&
+        inner.delta?.type === "textDelta"
+      ) {
+        process.stdout.write(`${GREEN}${inner.delta.text}`);
+      }
+      continue;
+    }
+
+    // Anuncio de herramienta (beforeToolCallEvent dispara una vez por llamada)
+    if (event.type === "beforeToolCallEvent") {
+      const name = event.toolUse?.name ?? "desconocida";
+      process.stdout.write(
+        `\n${MAGENTA}⚙️  Usando herramienta: ${name}${RESET}\n`,
+      );
+    }
+  }
 }
 
 /**

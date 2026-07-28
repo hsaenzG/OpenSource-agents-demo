@@ -13,19 +13,19 @@
  */
 
 import { Agent, tool } from "@strands-agents/sdk";
-import { BedrockModel } from "@strands-agents/sdk";
+import { createModel } from "./create_model.js";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { createInterface } from "readline";
+import { createInterface } from "node:readline/promises";
 import z from "zod";
-import { config } from "dotenv";
-import SpotifyWebApi from "spotify-web-api-node";
+import type { SpotifyClient } from "./spotify_client.js";
+import { conFiltroDeAnios } from "./spotify_client.js";
 import { authenticateSpotify } from "./spotify_auth.js";
-import { GREEN, YELLOW, RESET, printAgentPrefix, printAgentEnd, registerColorHooks } from "./utils_color.js";
+import { YELLOW, RESET, streamColored } from "./utils_color.js";
 
+// El .env lo carga create_model.js (import "dotenv/config") al importarse.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-config({ path: resolve(__dirname, "../.env") });
 
 interface Cancion {
   titulo: string;
@@ -43,7 +43,7 @@ const BIBLIOTECA: Cancion[] = JSON.parse(
 // ─── Spotify Setup (OAuth completo) ─────────────────────────────────────────
 
 let spotifyDisponible = false;
-let sp: SpotifyWebApi | null = null;
+let sp: SpotifyClient | null = null;
 
 const clientId = process.env.SPOTIFY_CLIENT_ID ?? "";
 const clientSecret = process.env.SPOTIFY_CLIENT_SECRET ?? "";
@@ -65,20 +65,41 @@ if (clientId && clientSecret) {
 
 const buscarEnSpotify = tool({
   name: "buscar_en_spotify",
-  description: `Busca canciones en Spotify por nombre, artista o género.
-SIEMPRE usa esta herramienta cuando el usuario pregunte por canciones, artistas o música.`,
+  description: `Busca canciones en Spotify. SIEMPRE úsala cuando el usuario pregunte por música.
+
+Para tener VARIEDAD, no hagas una sola búsqueda genérica. Haz VARIAS búsquedas
+distintas y combina los resultados. El query acepta los filtros de Spotify:
+  - genre:  → "genre:house", "genre:deep-house", "genre:techno"
+  - year:   → "genre:house year:2018-2024"
+  - artist: → "artist:Disclosure"
+
+Para armar una progresión de energía (por ejemplo un DJ set que sube de tranquilo
+a intenso), busca por subgéneros de menor a mayor energía en llamadas separadas:
+  deep house / melodic house → progressive house → tech house → peak-time.
+Nota: Spotify ya no expone el BPM por track a estas apps, así que ordena por
+subgénero y energía, no por un número de BPM exacto.
+
+Para acotar por época, usa los parámetros 'anio_inicio' y 'anio_fin' (NO escribas
+year: en el query, la herramienta arma el filtro sola).
+
+Usa 'limite' alto (30-50) cuando quieras muchas opciones, y 'offset' para pedir
+resultados distintos de una misma búsqueda (offset:20 trae los siguientes 20).`,
   inputSchema: z.object({
-    query: z.string().describe("Texto de búsqueda"),
-    limite: z.number().optional().describe("Número máximo de resultados (default: 10)"),
+    query: z.string().describe("Texto de búsqueda, admite filtros genre:/artist:"),
+    limite: z.number().default(20).describe("Máximo de resultados, hasta 50 (default: 20)"),
+    offset: z.number().default(0).describe("Desde qué resultado empezar, para paginar y variar (default: 0)"),
+    anio_inicio: z.number().optional().describe("Año inicial del rango, ej. 2015"),
+    anio_fin: z.number().optional().describe("Año final del rango, ej. 2024"),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) {
       return "Spotify no está conectado.";
     }
-    const limite = Math.min(Math.max(input.limite ?? 10, 1), 10);
+    const limite = Math.min(Math.max(input.limite ?? 20, 1), 50);
+    const offset = Math.max(input.offset ?? 0, 0);
+    const query = conFiltroDeAnios(input.query, input.anio_inicio, input.anio_fin);
     try {
-      const result = await sp.searchTracks(input.query, { limit: limite });
-      const tracks = result.body.tracks?.items ?? [];
+      const tracks = await sp.searchTracks(query, limite, offset);
       if (tracks.length === 0) {
         return `No encontré canciones en Spotify para: ${input.query}`;
       }
@@ -143,8 +164,8 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
     }
     try {
       // Verificar dispositivos activos
-      const devices = await sp.getMyDevices();
-      if (!devices.body.devices?.length) {
+      const devices = await sp.getDevices();
+      if (devices.length === 0) {
         return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo.";
       }
 
@@ -152,14 +173,12 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
       let query = `track:${input.nombre_cancion}`;
       if (input.artista) query += ` artist:${input.artista}`;
 
-      let result = await sp.searchTracks(query, { limit: 5 });
-      let tracks = result.body.tracks?.items ?? [];
+      let tracks = await sp.searchTracks(query, 5);
 
       // Fallback: búsqueda libre
       if (tracks.length === 0) {
         const freeQuery = `${input.nombre_cancion} ${input.artista ?? ""}`.trim();
-        result = await sp.searchTracks(freeQuery, { limit: 5 });
-        tracks = result.body.tracks?.items ?? [];
+        tracks = await sp.searchTracks(freeQuery, 5);
       }
 
       if (tracks.length === 0) {
@@ -170,10 +189,9 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
 
       // Buscar dispositivo activo
       const deviceId =
-        devices.body.devices.find((d) => d.is_active)?.id ??
-        devices.body.devices[0].id;
+        devices.find((d) => d.is_active)?.id ?? devices[0].id;
 
-      await sp.play({ device_id: deviceId!, uris: [track.uri] });
+      await sp.play(deviceId!, [track.uri]);
 
       return JSON.stringify({
         status: "reproduciendo",
@@ -220,10 +238,9 @@ const crearPlaylistEnSpotify = tool({
       } else {
         try {
           await new Promise((r) => setTimeout(r, 500)); // Rate limiting
-          const r = await sp.searchTracks(trimmed, { limit: 1 });
-          const tracks = r.body.tracks?.items ?? [];
-          if (tracks.length > 0) {
-            urisValidas.push(tracks[0].uri);
+          const encontradas = await sp.searchTracks(trimmed, 1);
+          if (encontradas.length > 0) {
+            urisValidas.push(encontradas[0].uri);
           }
         } catch { /* skip */ }
       }
@@ -235,20 +252,17 @@ const crearPlaylistEnSpotify = tool({
 
     try {
       const me = await sp.getMe();
-      const playlist = await (sp as any).createPlaylist(me.body.id, input.nombre, {
-        public: false,
-        description: input.descripcion,
-      });
+      const playlist = await sp.createPlaylist(me.id, input.nombre, input.descripcion, false);
 
       // Agregar canciones en batches de 100
       for (let i = 0; i < urisValidas.length; i += 100) {
-        await sp.addTracksToPlaylist((playlist as any).body.id, urisValidas.slice(i, i + 100));
+        await sp.addTracksToPlaylist(playlist.id, urisValidas.slice(i, i + 100));
       }
 
       return JSON.stringify({
         status: "ok",
         mensaje: `Playlist '${input.nombre}' creada con ${urisValidas.length} canciones`,
-        url: (playlist as any).body.external_urls.spotify,
+        url: playlist.external_urls.spotify,
       }, null, 2);
     } catch (e) {
       return `Error al crear la playlist: ${e}`;
@@ -266,9 +280,9 @@ const misTopArtistas = tool({
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
     try {
       const periodo = (input.periodo ?? "medium_term") as "short_term" | "medium_term" | "long_term";
-      const result = await sp.getMyTopArtists({ limit: 10, time_range: periodo });
+      const artistas = await sp.getTopArtists(10, periodo);
       return JSON.stringify(
-        result.body.items.map((a) => ({ nombre: a.name, generos: a.genres.slice(0, 3) })),
+        artistas.map((a) => ({ nombre: a.name, generos: a.genres.slice(0, 3) })),
         null, 2
       );
     } catch (e) {
@@ -287,9 +301,9 @@ const misTopCanciones = tool({
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
     try {
       const periodo = (input.periodo ?? "medium_term") as "short_term" | "medium_term" | "long_term";
-      const result = await sp.getMyTopTracks({ limit: 10, time_range: periodo });
+      const canciones = await sp.getTopTracks(10, periodo);
       return JSON.stringify(
-        result.body.items.map((t) => ({ titulo: t.name, artista: t.artists[0].name, uri: t.uri })),
+        canciones.map((t) => ({ titulo: t.name, artista: t.artists[0].name, uri: t.uri })),
         null, 2
       );
     } catch (e) {
@@ -300,10 +314,7 @@ const misTopCanciones = tool({
 
 // ─── Agente ──────────────────────────────────────────────────────────────────
 
-const modelo = new BedrockModel({
-  modelId: "us.amazon.nova-pro-v1:0",
-  region: "us-east-1",
-});
+const modelo = createModel(); // proveedor y modelo vienen del .env
 
 const dj = new Agent({
   model: modelo,
@@ -332,8 +343,8 @@ Respondes en español, con onda y buen gusto musical. 🎸🤘`,
     misTopArtistas,
     misTopCanciones,
   ],
+  printer: false, // manejamos la salida a mano con streamColored
 });
-await registerColorHooks(dj);
 
 // ─── Conversación interactiva ────────────────────────────────────────────────
 
@@ -341,29 +352,27 @@ console.log("\n🎧 DJ Personal con Spotify");
 console.log("=".repeat(50));
 console.log("Escribe tu mensaje (o 'salir' para terminar)\n");
 
-const rl = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-const askQuestion = (): void => {
-  rl.question(`${YELLOW}🎵 Tú: ${RESET}`, async (mensaje) => {
-    if (!mensaje || mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) {
-      console.log("\n👋 ¡Nos vemos! Que suene buena música.");
-      rl.close();
-      return;
-    }
+while (true) {
+  let mensaje: string;
+  try {
+    mensaje = (await rl.question(`${YELLOW}🎵 Tú: ${RESET}`)).trim();
+  } catch (error: any) {
+    // Ctrl+C (SIGINT) hace que readline aborte la pregunta. Salimos limpio.
+    if (error?.code === "ABORT_ERR") break;
+    throw error;
+  }
 
-    printAgentPrefix();
-    try {
-      await dj.invoke(mensaje);
-    } catch (e: any) {
-      console.log(`\n⚠️ Error: ${e.message}`);
-    }
-    printAgentEnd();
+  if (mensaje === "") continue;
+  if (mensaje.toLowerCase().match(/^(salir|exit|quit)$/)) break;
 
-    askQuestion();
-  });
-};
+  try {
+    await streamColored(dj, mensaje);
+  } catch (e: any) {
+    console.log(`\n⚠️ Error: ${e.message}`);
+  }
+}
 
-askQuestion();
+console.log("\n👋 ¡Nos vemos! Que suene buena música.");
+rl.close();
