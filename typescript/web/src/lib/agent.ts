@@ -9,36 +9,55 @@ import { fileURLToPath } from "url";
 const __agentDir = dirname(fileURLToPath(import.meta.url));
 loadEnv({ path: resolve(__agentDir, "../../.env") }); // Cargar .env del web root
 
-import { Agent, tool, BeforeToolCallEvent, BedrockModel } from "@strands-agents/sdk";
+import {
+  Agent,
+  tool,
+  BeforeToolCallEvent,
+  BedrockModel,
+} from "@strands-agents/sdk";
 import z from "zod";
 import { BIBLIOTECA } from "./canciones.js";
-import { initSpotify, buscarEnSpotify, reproducirCancion, crearPlaylistEnSpotify, misTopArtistas, misTopCanciones } from "./spotify.js";
+import {
+  initSpotify,
+  buscarEnSpotify,
+  reproducirCancion,
+  crearPlaylistEnSpotify,
+  misTopArtistas,
+  misTopCanciones,
+} from "./spotify.js";
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
 
 const buscarCanciones = tool({
   name: "buscar_canciones",
-  description: "Busca canciones en la biblioteca musical del usuario por género, mood o artista.",
+  description:
+    "Busca canciones en la biblioteca musical del usuario por género, mood o artista.",
   inputSchema: z.object({
-    genero: z.string().optional().describe("Género musical (ej: rock, jazz, reggaetón, electrónica)"),
-    mood: z.string().optional().describe("Estado de ánimo (ej: chill, fiesta, melancólico, energético)"),
+    genero: z
+      .string()
+      .optional()
+      .describe("Género musical (ej: rock, jazz, reggaetón, electrónica)"),
+    mood: z
+      .string()
+      .optional()
+      .describe("Estado de ánimo (ej: chill, fiesta, melancólico, energético)"),
     artista: z.string().optional().describe("Nombre del artista o banda"),
   }),
   callback: (input) => {
     let resultados = BIBLIOTECA;
     if (input.genero) {
       resultados = resultados.filter((c) =>
-        c.genero.toLowerCase().includes(input.genero!.toLowerCase())
+        c.genero.toLowerCase().includes(input.genero!.toLowerCase()),
       );
     }
     if (input.mood) {
       resultados = resultados.filter((c) =>
-        c.mood.toLowerCase().includes(input.mood!.toLowerCase())
+        c.mood.toLowerCase().includes(input.mood!.toLowerCase()),
       );
     }
     if (input.artista) {
       resultados = resultados.filter((c) =>
-        c.artista.toLowerCase().includes(input.artista!.toLowerCase())
+        c.artista.toLowerCase().includes(input.artista!.toLowerCase()),
       );
     }
     if (resultados.length === 0) {
@@ -50,9 +69,12 @@ const buscarCanciones = tool({
 
 const analizarEnergia = tool({
   name: "analizar_energia",
-  description: "Analiza el nivel de energía promedio de una lista de canciones y sugiere el orden ideal.",
+  description:
+    "Analiza el nivel de energía promedio de una lista de canciones y sugiere el orden ideal.",
   inputSchema: z.object({
-    canciones: z.array(z.string()).describe("Lista de nombres de canciones a analizar"),
+    canciones: z
+      .array(z.string())
+      .describe("Lista de nombres de canciones a analizar"),
   }),
   callback: (input) => {
     const energiaMap: Record<string, number> = {};
@@ -82,7 +104,7 @@ const analizarEnergia = tool({
             : "Playlist con buena energía 🔥",
       },
       null,
-      2
+      2,
     );
   },
 });
@@ -100,7 +122,7 @@ const duracionPlaylist = tool({
     }
     const total = input.canciones.reduce(
       (sum, t) => sum + (duracionMap[t.toLowerCase()] ?? 3.5),
-      0
+      0,
     );
     return JSON.stringify(
       {
@@ -116,7 +138,7 @@ const duracionPlaylist = tool({
             : "Buena duración 🎶",
       },
       null,
-      2
+      2,
     );
   },
 });
@@ -137,31 +159,51 @@ export async function getAgent(): Promise<Agent> {
       }
     }
 
-    const systemPrompt = `Eres un DJ personal con acceso TOTAL a Spotify y una biblioteca local.
-Tienes herramientas reales que controlan Spotify. ÚSALAS SIEMPRE.
+    const systemPrompt = `Eres un DJ personal que opera Spotify REAL a través de herramientas.
+NO eres un chatbot que responde de memoria. Tus únicas fuentes de datos musicales
+son las herramientas: si no llamaste una herramienta, NO tienes datos válidos.
 
-⚠️ PROHIBICIONES:
-- NUNCA digas "no puedo reproducir" o "no tengo la capacidad".
-- NUNCA sugieras al usuario que haga algo manualmente. TÚ lo haces.
-- NUNCA inventes información sobre canciones, artistas o URLs.
-- NUNCA respondas sin haber llamado al menos una herramienta primero.
+🔴 REGLA DE ORO
+NUNCA escribas una lista de canciones sacada de tu conocimiento. Toda canción que
+menciones DEBE venir del resultado de buscar_en_spotify. Está PROHIBIDO responder
+algo como "1. Bohemian Rhapsody - Queen, 2. Stairway to Heaven..." de memoria.
 
-✅ LO QUE DEBES HACER:
-1. Si piden REPRODUCIR → llama reproducir_cancion(nombre_cancion, artista)
-2. Si piden una PLAYLIST → busca con buscar_en_spotify, luego crear_playlist_en_spotify
-3. Si preguntan por MÚSICA → llama buscar_en_spotify PRIMERO
-4. Si dicen "ponme X" → llama reproducir_cancion INMEDIATAMENTE
-5. Para biblioteca local (mood, energía) → usa buscar_canciones, analizar_energia, duracion_playlist
+FLUJOS OBLIGATORIOS (seguílos al pie de la letra):
+- "Crea / arma / genera una playlist de X":
+    PASO 1 → buscar_en_spotify (una o varias búsquedas por género/subgénero).
+    PASO 2 → crear_playlist_en_spotify usando las URIs REALES que devolvió el paso 1.
+    PASO 3 → comparte el link que devolvió crear_playlist_en_spotify.
+    Nunca saltes el paso 1 ni el 2. Nunca inventes la lista.
+- "Reproduce / pon / ponme X" → reproducir_cancion INMEDIATAMENTE.
+- "Busca / recomiéndame música" → buscar_en_spotify PRIMERO.
+- Preguntas sobre gustos del usuario → mis_top_artistas / mis_top_canciones.
+- Análisis de biblioteca local (mood, energía, duración) → buscar_canciones,
+  analizar_energia, duracion_playlist.
 
-Respondes en español con onda rockera. 🎸🤘`;
+⛔ PROHIBIDO
+- Responder sobre canciones sin haber llamado buscar_en_spotify.
+- Escribir listas numeradas de canciones inventadas.
+- Decir "no puedo" o pedirle al usuario que lo haga manual. TÚ lo haces con las tools.
+
+Después de usar las herramientas, respondé breve y con onda rockera. 🎸🤘`;
 
     agentInstance = new Agent({
       model: new BedrockModel({
         modelId: process.env.BEDROCK_MODEL_ID || "us.amazon.nova-pro-v1:0",
         region: process.env.AWS_REGION || "us-east-1",
+        temperature: 0.4,
       }),
       systemPrompt,
-      tools: [buscarEnSpotify, reproducirCancion, crearPlaylistEnSpotify, misTopArtistas, misTopCanciones, buscarCanciones, analizarEnergia, duracionPlaylist],
+      tools: [
+        buscarEnSpotify,
+        reproducirCancion,
+        crearPlaylistEnSpotify,
+        misTopArtistas,
+        misTopCanciones,
+        buscarCanciones,
+        analizarEnergia,
+        duracionPlaylist,
+      ],
       printer: false,
     });
   }
