@@ -1,191 +1,205 @@
 # 🎧 DJ Agent — TypeScript Edition
 
-Un agente de IA que actúa como DJ y curador musical, construido con TypeScript, [Strands Agents SDK](https://github.com/strands-agents/sdk-typescript) y [Ollama](https://ollama.com/). Todo open source, local y gratis.
+Un agente de IA que actúa como DJ y curador musical, construido con TypeScript y el [Strands Agents SDK](https://github.com/strands-agents/sdk-typescript).
+
+Hay dos formas de usarlo:
+
+- **CLI (las 6 capas):** aprendé a construir un agente paso a paso, de lo más simple a un sistema multi-agente. Corre local con [Ollama](https://ollama.com/) o en la nube con Amazon Bedrock.
+- **App web:** una interfaz tipo chat con reproductor de Spotify, playlists y streaming en vivo de lo que hace el agente.
 
 Basado en el [proyecto original en Python](../README.md).
 
+---
+
 ## Requisitos
 
-- Node.js 20+
-- [Ollama](https://ollama.com/) (para capas 1-4)
-- AWS CLI configurado (para capas 5-6, usa Amazon Bedrock)
-- (Opcional) Cuenta de [Spotify Developer](https://developer.spotify.com/dashboard) para las capas 5-6
+- **Node.js 20+**
+- Para correr local: [Ollama](https://ollama.com/)
+- Para usar Bedrock o la app web: **AWS CLI configurado** con acceso a Amazon Bedrock
+- (Opcional) Cuenta de [Spotify Developer](https://developer.spotify.com/dashboard)
 
-## Guía paso a paso
+---
 
-### 1. Instalar Ollama
+## Parte 1 — CLI (las 6 capas)
 
-```bash
-# macOS
-brew install ollama
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-### 2. Descargar el modelo
-
-```bash
-ollama pull llama3.1
-```
-
-### 3. Levantar el servidor
-
-```bash
-ollama serve
-```
-
-> Si instalaste la app de macOS, el servidor ya corre en segundo plano.
-
-### 4. Instalar dependencias
+### 1. Instalar dependencias
 
 ```bash
 cd typescript
 npm install
 ```
 
-### 5. (Opcional) Configurar Spotify — para capas 5 y 6
+### 2. Configurar el `.env`
 
-Crea una app en [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
+```bash
+cp .env.example .env
+```
 
-1. Click en **Create App**
-2. Nombre: lo que quieras (ej: "DJ Agent")
-3. Redirect URI: `http://127.0.0.1:8000/callback`
-4. Marca **Web API**
-5. Guarda el **Client ID** y **Client Secret**
-
-Crea un archivo `.env` en la carpeta `typescript/`:
+Elige con qué modelo corren **todas** las capas:
 
 ```env
+# Opción A — Local y gratis (default)
+MODEL_PROVIDER=ollama
+MODEL_ID=llama3.1:8b
+
+# Opción B — Amazon Bedrock (requiere AWS CLI configurado)
+# MODEL_PROVIDER=bedrock
+# BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0
+# AWS_REGION=us-east-1
+```
+
+### 3. Si usas Ollama (opción A)
+
+```bash
+ollama pull llama3.1:8b   # descarga el modelo
+ollama serve              # levanta el servidor (la app de macOS ya lo corre solo)
+```
+
+### 4. Correr una capa
+
+```bash
+npm run capa1   # ... hasta npm run capa6
+```
+
+> Las capas 5 y 6 usan Spotify. Si no configuraste Spotify, igual corren usando la biblioteca local (`data/canciones.json`).
+
+---
+
+## Parte 2 — App web
+
+Interfaz visual del DJ Agent: chat, reproductor de Spotify, creación de playlists y feed en vivo de las herramientas que usa el agente.
+
+> La app web usa **Amazon Bedrock**, así que necesitas AWS configurado.
+
+### 1. Instalar y configurar
+
+```bash
+cd typescript/web
+npm install
+cp .env.example .env
+```
+
+Edita `web/.env`:
+
+```env
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0
 SPOTIFY_CLIENT_ID=tu-client-id
 SPOTIFY_CLIENT_SECRET=tu-client-secret
 ```
 
-## Las 6 capas
+### 2. Levantar el servidor
 
-Cada archivo representa una capa incremental del agente:
+```bash
+aws login       # asegúrate de tener credenciales AWS activas
+npm run dev
+```
+
+Abre **`http://127.0.0.1:4321`** (usa `127.0.0.1`, no `localhost` — ver nota de Spotify abajo).
+
+### 3. Conectar Spotify
+
+En la barra lateral, click en **🔗 Conectar mi Spotify**. Autorizas una vez en el navegador y listo: el agente puede buscar, crear playlists y controlar la reproducción.
+
+- Controlar la reproducción (play/pausa/next) requiere **Spotify Premium** y tener Spotify abierto en algún dispositivo.
+- El token se guarda y se refresca solo. Si expira, vuelve a aparecer el botón de conectar.
+
+---
+
+## Configurar Spotify (opcional)
+
+Crea una app en el [Spotify Developer Dashboard](https://developer.spotify.com/dashboard):
+
+1. **Create App** → ponle cualquier nombre.
+2. Marca **Web API**.
+3. Agrega los **Redirect URIs** (según lo que vayas a usar):
+   - CLI: `http://127.0.0.1:8000/callback`
+   - Web: `http://127.0.0.1:4321/api/spotify/callback`
+4. Copia el **Client ID** y **Client Secret** a tu `.env`.
+
+> ⚠️ Spotify ya no acepta `localhost`, tiene que ser `127.0.0.1`. Por eso abre la web en `http://127.0.0.1:4321`.
+
+---
+
+## Las 6 capas (CLI)
+
+Cada archivo agrega un concepto nuevo, de simple a complejo:
 
 | Archivo | Capa | Concepto nuevo |
 |---|---|---|
-| `src/capa1_agente_basico.ts` | 1 — Solo habla | `Agent`, `VercelModel` + Ollama |
-| `src/capa2_con_tools.ts` | 2 — Búsqueda | `tool()`, tool calling con Zod |
-| `src/capa3_multi_tools.ts` | 3 — Multi-tools | Múltiples tools, agent loop |
-| `src/capa4_memoria.ts` | 4 — Memoria | Sesiones persistentes en JSON |
-| `src/capa5_spotify.ts` | 5 — API externa | `BedrockModel`, Spotify API |
-| `src/capa6_multi_agente.ts` | 6 — Multi-agente | Orquestador + sub-agentes como tools |
+| `src/capa1_agente_basico.ts` | 1 — Solo habla | `Agent` + modelo (Ollama o Bedrock) |
+| `src/capa2_con_tools.ts` | 2 — Búsqueda | `tool()` + schemas Zod |
+| `src/capa3_multi_tools.ts` | 3 — Multi-tools | Varias tools, el agente decide cuál usar |
+| `src/capa4_memoria.ts` | 4 — Memoria | `SessionManager` nativo (persiste en disco) |
+| `src/capa5_spotify.ts` | 5 — API externa | Cliente Spotify nativo (fetch) |
+| `src/capa6_multi_agente.ts` | 6 — Multi-agente | Orquestador + sub-agentes con `asTool()` |
 
-```bash
-# Capas básicas (Ollama local)
-npm run capa1
-npm run capa2
-npm run capa3
-npm run capa4
-
-# Capas avanzadas (Bedrock + Spotify)
-npm run capa5
-npm run capa6
-```
-
-O directamente con tsx:
-
-```bash
-npx tsx src/capa1_agente_basico.ts
-npx tsx src/capa2_con_tools.ts
-# ...
-```
-
-## Detalle de cada capa
-
-### Capa 1 — Agente básico
-Un modelo + un prompt. Sin herramientas. Solo responde con su conocimiento general.
-Usa `VercelModel` con `ai-sdk-ollama` para conectar con Ollama local.
-
-### Capa 2 — Con herramientas
-El agente puede buscar canciones en una biblioteca local JSON. Primer contacto con `tool()` y schemas Zod.
-
-### Capa 3 — Múltiples herramientas
-Tres tools: buscar, analizar energía, calcular duración. El modelo decide solo qué llamar y en qué orden.
-
-### Capa 4 — Memoria
-Un `FileSessionManager` custom persiste conversaciones a disco como JSON. El agente recuerda gustos entre sesiones.
-
-### Capa 5 — Spotify (API externa)
-Conexión real con la API de Spotify via Amazon Bedrock (Nova Pro):
-- Buscar canciones en el catálogo completo de Spotify
-- Proponer playlists con URIs reales
-- Conversación interactiva desde la consola
-
-### Capa 6 — Multi-Agente con Orquestador
-Un agente orquestador que delega a sub-agentes especializados:
+### Capa 6 — Multi-agente en corto
 
 ```
-         Usuario
-            │
-            ▼
-    ┌───────────────────┐
-    │   Orquestador     │  ← Decide a quién delegar
-    │   tools: [        │
-    │     dj_personal,  │
-    │     dj_eventos,   │
-    │     dj_emocional  │
-    │   ]               │
-    └───┬───────┬───────┘
-        │       │       │
-        ▼       ▼       ▼
-    DJ Personal  DJ Eventos  DJ Emocional
+    Usuario → Orquestador → decide a quién delegar
+                  │
+        ┌─────────┼─────────┐
+        ▼         ▼         ▼
+   DJ Personal  DJ Eventos  DJ Emocional
 ```
 
-El concepto clave: **los sub-agentes se exponen como `tool()` del orquestador**. El orquestador es un agente que usa otros agentes como herramientas.
+El truco: cada sub-agente se expone como una `tool()` del orquestador con `agente.asTool()`. Un agente que usa otros agentes como herramientas.
 
-| DJ | Se activa cuando... |
-|---|---|
-| 🎵 DJ Personal | "recomiéndame algo", "qué hay nuevo de X" |
-| 🎉 DJ de Eventos | "arma playlist de 3h para una fiesta" |
-| 💜 DJ Emocional | "estoy triste", "me siento motivado" |
+---
 
-Los sub-agentes usan `printer: false` para silenciar su output — solo el orquestador habla con el usuario.
+## Cómo se conecta cada pieza
+
+- **`src/create_model.ts`** — factory que elige Ollama o Bedrock según `MODEL_PROVIDER`. Un solo punto para todas las capas.
+- **`src/ollama_model.ts`** — wrapper de Ollama (sobre `ai-sdk-ollama`) que corrige eventos del stream que el SDK espera.
+- **`src/spotify_client.ts`** — cliente de Spotify con `fetch` nativo: auth, refresh de token y reintento ante 401. Sin librerías.
+- **`src/spotify_auth.ts`** — flujo OAuth del CLI (abre el navegador, cachea el token).
+- **`web/`** — la app Astro. El OAuth vive en `web/src/pages/api/spotify/*` y el agente en `web/src/lib/agent.ts`.
+
+---
 
 ## Diferencias con la versión Python
 
 | Aspecto | Python | TypeScript |
 |---|---|---|
-| SDK | `strands-agents[ollama]` | `@strands-agents/sdk` |
-| Ollama | `OllamaModel` nativo | `VercelModel` + `ai-sdk-ollama` |
-| Tool definition | `@tool` decorator + docstrings | `tool()` función + Zod schemas |
-| Validación | Type hints | Zod schemas (runtime + static) |
-| Spotify | `spotipy` | `spotify-web-api-node` |
-| Sesiones | `FileSessionManager` (built-in) | Custom `FileSessionManager` |
-| Ejecución | `python archivo.py` | `npx tsx src/archivo.ts` |
+| SDK | `strands-agents` | `@strands-agents/sdk` |
+| Modelo local | `OllamaModel` nativo | `OllamaModel` sobre `ai-sdk-ollama` |
+| Selección de modelo | por código | `MODEL_PROVIDER` en `.env` |
+| Tools | `@tool` + docstrings | `tool()` + Zod (runtime + estático) |
+| Spotify | `spotipy` | `fetch` nativo (`spotify_client.ts`) |
+| Sesiones | `FileSessionManager` | `SessionManager` + `FileStorage` del SDK |
+| Ejecución | `python archivo.py` | `npm run capaN` |
+
+---
 
 ## Estructura del proyecto
 
 ```
 typescript/
-├── README.md
-├── .env                            # Credenciales de Spotify (no subir a git)
-├── .env.example                    # Template de .env
-├── .gitignore
+├── .env / .env.example          # credenciales y selección de modelo (no subir .env)
 ├── package.json
-├── tsconfig.json
-├── data/
-│   └── canciones.json              # Biblioteca musical local (30 canciones)
+├── data/canciones.json          # biblioteca musical local (30 canciones)
 ├── src/
-│   ├── utils_color.ts              # Utilidades de color para terminal
-│   ├── capa1_agente_basico.ts      # Agente básico (Ollama)
-│   ├── capa2_con_tools.ts          # Agente + búsqueda local
-│   ├── capa3_multi_tools.ts        # Agente + múltiples herramientas
-│   ├── capa4_memoria.ts            # Agente + memoria persistente
-│   ├── capa5_spotify.ts            # Agente + Spotify (Bedrock)
-│   └── capa6_multi_agente.ts       # Multi-agente con orquestador
-└── sesiones/                       # Sesiones guardadas (auto-generado)
+│   ├── create_model.ts          # elige Ollama o Bedrock según .env
+│   ├── ollama_model.ts          # wrapper de Ollama para el SDK
+│   ├── spotify_client.ts        # cliente Spotify con fetch nativo
+│   ├── spotify_auth.ts          # OAuth del CLI
+│   ├── capa1_agente_basico.ts   # ... hasta capa6
+│   └── utils_color.ts
+├── sesiones/                    # sesiones guardadas (auto-generado)
+└── web/                         # app web (Astro): chat, reproductor, playlists
+    └── src/
+        ├── lib/                 # agent.ts, spotify.ts, spotify_client.ts, spotify_auth.ts
+        └── pages/
+            ├── index.astro      # UI
+            └── api/             # chat (SSE), playback, playlist, spotify/{login,callback,status}
 ```
+
+---
 
 ## Recursos
 
 - [Strands Agents TypeScript SDK](https://github.com/strands-agents/sdk-typescript)
 - [Documentación de Strands Agents](https://strandsagents.com)
-- [TypeScript Quickstart](https://strandsagents.com/docs/user-guide/quickstart/typescript/)
-- [Ollama](https://ollama.com/)
-- [spotify-web-api-node](https://github.com/thelinmichael/spotify-web-api-node)
-- [Amazon Bedrock](https://aws.amazon.com/bedrock/)
-- [Zod](https://zod.dev/) — validación de schemas
+- [Ollama](https://ollama.com/) · [Amazon Bedrock](https://aws.amazon.com/bedrock/) · [Zod](https://zod.dev/)
+- [Spotify Web API](https://developer.spotify.com/documentation/web-api) · [Astro](https://astro.build/)
