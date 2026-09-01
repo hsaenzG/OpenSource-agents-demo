@@ -53,21 +53,24 @@ Filtra por género, mood o artista.`,
     artista: z.string().optional().describe("Nombre del artista o banda"),
   }),
   callback: (input) => {
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
     let resultados = BIBLIOTECA;
 
     if (input.genero) {
       resultados = resultados.filter((c) =>
-        c.genero.toLowerCase().includes(input.genero!.toLowerCase())
+        norm(c.genero).includes(norm(input.genero!))
       );
     }
     if (input.mood) {
       resultados = resultados.filter((c) =>
-        c.mood.toLowerCase().includes(input.mood!.toLowerCase())
+        norm(c.mood).includes(norm(input.mood!))
       );
     }
     if (input.artista) {
       resultados = resultados.filter((c) =>
-        c.artista.toLowerCase().includes(input.artista!.toLowerCase())
+        norm(c.artista).includes(norm(input.artista!))
       );
     }
 
