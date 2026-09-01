@@ -11,8 +11,11 @@
  *   - Modelo llama3.1 descargado
  */
 
+import "dotenv/config";
 import { Agent, tool } from "@strands-agents/sdk";
-import { createModel } from "./create_model.js";
+// import { BedrockModel } from "@strands-agents/sdk";
+import { VercelModel } from "@strands-agents/sdk/models/vercel";
+import { createOllama } from "ai-sdk-ollama";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -162,7 +165,12 @@ const duracionPlaylist = tool({
 
 // ─── Agente ──────────────────────────────────────────────────────────────────
 
-const modelo = createModel(); // proveedor y modelo vienen del .env
+const modelo = new VercelModel({
+  provider: createOllama({
+    baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+  })(process.env.MODEL_ID ?? "llama3.2"),
+});
+// const modelo = new BedrockModel({ modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0", region: process.env.AWS_REGION ?? "us-east-1" });
 
 const dj = new Agent({
   model: modelo,

@@ -32,8 +32,11 @@
  *   - (Opcional) Spotify configurado en .env
  */
 
+import "dotenv/config";
 import { Agent, tool } from "@strands-agents/sdk";
-import { createModel } from "./create_model.js";
+// import { BedrockModel } from "@strands-agents/sdk";
+import { VercelModel } from "@strands-agents/sdk/models/vercel";
+import { createOllama } from "ai-sdk-ollama";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -44,7 +47,6 @@ import { conFiltroDeAnios } from "./spotify_client.js";
 import { authenticateSpotify } from "./spotify_auth.js";
 import { YELLOW, RESET, streamColored } from "./utils_color.js";
 
-// El .env lo carga create_model.js (import "dotenv/config") al importarse.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 interface Cancion {
@@ -508,7 +510,12 @@ USA los queries_spotify devueltos para buscar canciones con buscar_en_spotify.`,
 // SUB-AGENTES — Cada uno es un especialista con su propia personalidad
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const modelo = createModel(); // proveedor y modelo vienen del .env
+const modelo = new VercelModel({
+  provider: createOllama({
+    baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+  })(process.env.MODEL_ID ?? "llama3.2"),
+});
+// const modelo = new BedrockModel({ modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0", region: process.env.AWS_REGION ?? "us-east-1" });
 
 const djPersonal = new Agent({
   name: "dj_personal",
