@@ -4,7 +4,7 @@
  * Concepto nuevo: persistencia de conversaciones.
  * El agente recuerda los gustos del usuario entre mensajes y entre ejecuciones.
  * Usa el SessionManager nativo del SDK, que persiste la conversación en disco
- * (FileStorage) y la restaura al arrancar.
+ * (LocalFileStorage) y la restaura al arrancar.
  *
  * Requisitos:
  *   - Ollama corriendo en localhost:11434
@@ -13,7 +13,8 @@
 
 import { createInterface } from "node:readline/promises";
 import "dotenv/config";
-import { Agent, tool, SessionManager, FileStorage } from "@strands-agents/sdk";
+import { Agent, tool, SessionManager } from "@strands-agents/sdk";
+import { LocalFileStorage } from "@strands-agents/sdk/storage";
 import { BedrockModel } from "@strands-agents/sdk";
 import { VercelModel } from "@strands-agents/sdk/models/vercel";
 import { createOllama } from "ai-sdk-ollama";
@@ -167,7 +168,7 @@ const modelo = new VercelModel({
 // no un resumen pegado al system prompt. Guarda tras cada invoke por defecto.
 const sessionManager = new SessionManager({
   sessionId: "usuario-1",
-  storage: { snapshot: new FileStorage(resolve(__dirname, "../sesiones")) },
+  storage: new LocalFileStorage(resolve(__dirname, "../sesiones")),
 });
 
 const dj = new Agent({
