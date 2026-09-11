@@ -14,15 +14,15 @@
 
 import "dotenv/config";
 import { Agent, tool } from "@strands-agents/sdk";
-// import { BedrockModel } from "@strands-agents/sdk";
-import { VercelModel } from "@strands-agents/sdk/models/vercel";
-import { createOllama } from "ai-sdk-ollama";
+import { BedrockModel } from "@strands-agents/sdk";
+// import { VercelModel } from "@strands-agents/sdk/models/vercel";
+// import { createOllama } from "ai-sdk-ollama";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "node:readline/promises";
 import z from "zod";
-import type { SpotifyClient } from "./spotify_client.js";
+import type { SpotifyClient, SpotifyTrack } from "./spotify_client.js";
 import { conFiltroDeAnios } from "./spotify_client.js";
 import { authenticateSpotify } from "./spotify_auth.js";
 import { YELLOW, RESET, streamColored } from "./utils_color.js";
@@ -39,7 +39,7 @@ interface Cancion {
 }
 
 const BIBLIOTECA: Cancion[] = JSON.parse(
-  readFileSync(resolve(__dirname, "../data/canciones.json"), "utf-8")
+  readFileSync(resolve(__dirname, "../data/canciones.json"), "utf-8"),
 );
 
 // ─── Spotify Setup (OAuth completo) ─────────────────────────────────────────
@@ -59,11 +59,25 @@ if (clientId && clientSecret) {
     console.log("   El agente funcionará solo con la biblioteca local.\n");
   }
 } else {
-  console.log("⚠️  Spotify no configurado (falta SPOTIFY_CLIENT_ID/SECRET en .env)");
+  console.log(
+    "⚠️  Spotify no configurado (falta SPOTIFY_CLIENT_ID/SECRET en .env)",
+  );
   console.log("   El agente funcionará solo con la biblioteca local.\n");
 }
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
+
+// Neutraliza los operadores de sintaxis de Spotify en texto libre: el guion excluye
+// términos (operador NOT) y las comillas rompen el parseo de filtros. No tocamos
+// palabras; dejamos que la relevancia de Spotify ordene. No aplica a buscar_en_spotify,
+// que sí usa filtros (genre:/year:).
+function limpiarParaBusqueda(texto: string): string {
+  return texto
+    .replace(/["']/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const buscarEnSpotify = tool({
   name: "buscar_en_spotify",
@@ -87,10 +101,23 @@ year: en el query, la herramienta arma el filtro sola).
 Usa 'limite' alto (30-50) cuando quieras muchas opciones, y 'offset' para pedir
 resultados distintos de una misma búsqueda (offset:20 trae los siguientes 20).`,
   inputSchema: z.object({
-    query: z.string().describe("Texto de búsqueda, admite filtros genre:/artist:"),
-    limite: z.number().default(20).describe("Máximo de resultados, hasta 50 (default: 20)"),
-    offset: z.number().default(0).describe("Desde qué resultado empezar, para paginar y variar (default: 0)"),
-    anio_inicio: z.number().optional().describe("Año inicial del rango, ej. 2015"),
+    query: z
+      .string()
+      .describe("Texto de búsqueda, admite filtros genre:/artist:"),
+    limite: z
+      .number()
+      .default(20)
+      .describe("Máximo de resultados, hasta 50 (default: 20)"),
+    offset: z
+      .number()
+      .default(0)
+      .describe(
+        "Desde qué resultado empezar, para paginar y variar (default: 0)",
+      ),
+    anio_inicio: z
+      .number()
+      .optional()
+      .describe("Año inicial del rango, ej. 2015"),
     anio_fin: z.number().optional().describe("Año final del rango, ej. 2024"),
   }),
   callback: async (input) => {
@@ -99,7 +126,11 @@ resultados distintos de una misma búsqueda (offset:20 trae los siguientes 20).`
     }
     const limite = Math.min(Math.max(input.limite ?? 20, 1), 50);
     const offset = Math.max(input.offset ?? 0, 0);
-    const query = conFiltroDeAnios(input.query, input.anio_inicio, input.anio_fin);
+    const query = conFiltroDeAnios(
+      input.query,
+      input.anio_inicio,
+      input.anio_fin,
+    );
     try {
       const tracks = await sp.searchTracks(query, limite, offset);
       if (tracks.length === 0) {
@@ -129,22 +160,25 @@ const buscarCanciones = tool({
   }),
   callback: (input) => {
     const norm = (s: string) =>
-      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      s
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
 
     let resultados = BIBLIOTECA;
     if (input.genero) {
       resultados = resultados.filter((c) =>
-        norm(c.genero).includes(norm(input.genero!))
+        norm(c.genero).includes(norm(input.genero!)),
       );
     }
     if (input.mood) {
       resultados = resultados.filter((c) =>
-        norm(c.mood).includes(norm(input.mood!))
+        norm(c.mood).includes(norm(input.mood!)),
       );
     }
     if (input.artista) {
       resultados = resultados.filter((c) =>
-        norm(c.artista).includes(norm(input.artista!))
+        norm(c.artista).includes(norm(input.artista!)),
       );
     }
     if (resultados.length === 0) {
@@ -158,10 +192,20 @@ const reproducirCancion = tool({
   name: "reproducir_cancion",
   description: `Reproduce una canción en el dispositivo activo de Spotify del usuario.
 Busca la canción por nombre en Spotify y la reproduce automáticamente.
-SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir una canción.`,
+SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir una canción.
+
+Manda el título en 'nombre_cancion' y el artista SIEMPRE en 'artista', por separado.
+NO metas el artista dentro de 'nombre_cancion' (nada de "Título de Fulano" o "Título - Fulano").`,
   inputSchema: z.object({
-    nombre_cancion: z.string().describe("Nombre de la canción a reproducir"),
-    artista: z.string().optional().describe("Nombre del artista (opcional, ayuda a encontrar la canción correcta)"),
+    nombre_cancion: z
+      .string()
+      .describe("Solo el título de la canción, sin el artista"),
+    artista: z
+      .string()
+      .optional()
+      .describe(
+        "Artista, por separado. Inclúyelo siempre que lo sepas; mejora mucho el acierto",
+      ),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) {
@@ -174,16 +218,19 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
         return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo.";
       }
 
-      // Buscar la canción
-      let query = `track:${input.nombre_cancion}`;
-      if (input.artista) query += ` artist:${input.artista}`;
+      // Buscar la canción — texto libre (Spotify ordena por relevancia) antes que
+      // filtros. De más específica a más laxa; nos quedamos con el primer acierto.
+      const titulo = limpiarParaBusqueda(input.nombre_cancion);
+      const artista = input.artista ? limpiarParaBusqueda(input.artista) : "";
 
-      let tracks = await sp.searchTracks(query, 5);
+      const intentos = artista
+        ? [`${titulo} ${artista}`, `track:"${titulo}" artist:"${artista}"`, titulo]
+        : [titulo, `track:"${titulo}"`];
 
-      // Fallback: búsqueda libre
-      if (tracks.length === 0) {
-        const freeQuery = `${input.nombre_cancion} ${input.artista ?? ""}`.trim();
-        tracks = await sp.searchTracks(freeQuery, 5);
+      let tracks: SpotifyTrack[] = [];
+      for (const q of intentos) {
+        tracks = await sp.searchTracks(q, 5);
+        if (tracks.length > 0) break;
       }
 
       if (tracks.length === 0) {
@@ -193,21 +240,27 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
       const track = tracks[0];
 
       // Buscar dispositivo activo
-      const deviceId =
-        devices.find((d) => d.is_active)?.id ?? devices[0].id;
+      const deviceId = devices.find((d) => d.is_active)?.id ?? devices[0].id;
 
       await sp.play(deviceId!, [track.uri]);
 
-      return JSON.stringify({
-        status: "reproduciendo",
-        cancion: track.name,
-        artista: track.artists[0].name,
-        album: track.album.name,
-        mensaje: `▶️ Reproduciendo: ${track.name} — ${track.artists[0].name}`,
-      }, null, 2);
+      return JSON.stringify(
+        {
+          status: "reproduciendo",
+          cancion: track.name,
+          artista: track.artists[0].name,
+          album: track.album.name,
+          mensaje: `▶️ Reproduciendo: ${track.name} — ${track.artists[0].name}`,
+        },
+        null,
+        2,
+      );
     } catch (e: any) {
       const msg = e.message ?? String(e);
-      if (msg.includes("NO_ACTIVE_DEVICE") || msg.includes("Player command failed")) {
+      if (
+        msg.includes("NO_ACTIVE_DEVICE") ||
+        msg.includes("Player command failed")
+      ) {
         return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo.";
       }
       if (msg.includes("PREMIUM_REQUIRED")) {
@@ -224,7 +277,9 @@ const crearPlaylistEnSpotify = tool({
   inputSchema: z.object({
     nombre: z.string().describe("Nombre de la playlist"),
     descripcion: z.string().describe("Descripción breve de la playlist"),
-    canciones_uris: z.array(z.string()).describe("Lista de URIs de Spotify o nombres de canciones"),
+    canciones_uris: z
+      .array(z.string())
+      .describe("Lista de URIs de Spotify o nombres de canciones"),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) {
@@ -247,7 +302,9 @@ const crearPlaylistEnSpotify = tool({
           if (encontradas.length > 0) {
             urisValidas.push(encontradas[0].uri);
           }
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
     }
 
@@ -257,18 +314,30 @@ const crearPlaylistEnSpotify = tool({
 
     try {
       const me = await sp.getMe();
-      const playlist = await sp.createPlaylist(me.id, input.nombre, input.descripcion, false);
+      const playlist = await sp.createPlaylist(
+        me.id,
+        input.nombre,
+        input.descripcion,
+        false,
+      );
 
       // Agregar canciones en batches de 100
       for (let i = 0; i < urisValidas.length; i += 100) {
-        await sp.addTracksToPlaylist(playlist.id, urisValidas.slice(i, i + 100));
+        await sp.addTracksToPlaylist(
+          playlist.id,
+          urisValidas.slice(i, i + 100),
+        );
       }
 
-      return JSON.stringify({
-        status: "ok",
-        mensaje: `Playlist '${input.nombre}' creada con ${urisValidas.length} canciones`,
-        url: playlist.external_urls.spotify,
-      }, null, 2);
+      return JSON.stringify(
+        {
+          status: "ok",
+          mensaje: `Playlist '${input.nombre}' creada con ${urisValidas.length} canciones`,
+          url: playlist.external_urls.spotify,
+        },
+        null,
+        2,
+      );
     } catch (e) {
       return `Error al crear la playlist: ${e}`;
     }
@@ -279,16 +348,28 @@ const misTopArtistas = tool({
   name: "mis_top_artistas",
   description: `Obtiene los artistas más escuchados del usuario en Spotify.`,
   inputSchema: z.object({
-    periodo: z.string().optional().describe('"short_term" (último mes), "medium_term" (6 meses), "long_term" (siempre)'),
+    periodo: z
+      .string()
+      .optional()
+      .describe(
+        '"short_term" (último mes), "medium_term" (6 meses), "long_term" (siempre)',
+      ),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
     try {
-      const periodo = (input.periodo ?? "medium_term") as "short_term" | "medium_term" | "long_term";
+      const periodo = (input.periodo ?? "medium_term") as
+        | "short_term"
+        | "medium_term"
+        | "long_term";
       const artistas = await sp.getTopArtists(10, periodo);
       return JSON.stringify(
-        artistas.map((a) => ({ nombre: a.name, generos: a.genres.slice(0, 3) })),
-        null, 2
+        artistas.map((a) => ({
+          nombre: a.name,
+          generos: a.genres.slice(0, 3),
+        })),
+        null,
+        2,
       );
     } catch (e) {
       return `Error: ${e}`;
@@ -300,16 +381,27 @@ const misTopCanciones = tool({
   name: "mis_top_canciones",
   description: `Obtiene las canciones más escuchadas del usuario en Spotify.`,
   inputSchema: z.object({
-    periodo: z.string().optional().describe('"short_term", "medium_term", "long_term"'),
+    periodo: z
+      .string()
+      .optional()
+      .describe('"short_term", "medium_term", "long_term"'),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
     try {
-      const periodo = (input.periodo ?? "medium_term") as "short_term" | "medium_term" | "long_term";
+      const periodo = (input.periodo ?? "medium_term") as
+        | "short_term"
+        | "medium_term"
+        | "long_term";
       const canciones = await sp.getTopTracks(10, periodo);
       return JSON.stringify(
-        canciones.map((t) => ({ titulo: t.name, artista: t.artists[0].name, uri: t.uri })),
-        null, 2
+        canciones.map((t) => ({
+          titulo: t.name,
+          artista: t.artists[0].name,
+          uri: t.uri,
+        })),
+        null,
+        2,
       );
     } catch (e) {
       return `Error: ${e}`;
@@ -319,12 +411,16 @@ const misTopCanciones = tool({
 
 // ─── Agente ──────────────────────────────────────────────────────────────────
 
-const modelo = new VercelModel({
-  provider: createOllama({
-    baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
-  })(process.env.MODEL_ID ?? "llama3.2"),
+// const modelo = new VercelModel({
+//   provider: createOllama({
+//     baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+//   })(process.env.MODEL_ID ?? "llama3.2"),
+// });
+const modelo = new BedrockModel({
+  modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0",
+  region: process.env.AWS_REGION ?? "us-east-1",
+  // clientConfig: { profile: "starterhome1-project" },
 });
-// const modelo = new BedrockModel({ modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0", region: process.env.AWS_REGION ?? "us-east-1" });
 
 const dj = new Agent({
   model: modelo,
