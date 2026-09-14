@@ -1,8 +1,5 @@
 /**
- * Capa 1 — Agente Básico
- *
- * Concepto nuevo: Agent + modelo Ollama (local).
- * Sin herramientas, sin memoria. Solo responde con su conocimiento general.
+ * Capa 0 — Agente Básico
  *
  * Requisitos:
  *   - Ollama corriendo en localhost:11434
@@ -25,9 +22,6 @@ const modelo = new VercelModel({
 
 const dj = new Agent({
   model: modelo,
-  systemPrompt: `Eres un DJ y curador musical experto.
-Respondes en español, con onda y buen gusto.
-Recomiendas música basándote en el mood, la ocasión, y los gustos del usuario.`,
   printer: false, // manejamos la salida a mano con streamColored
 });
 

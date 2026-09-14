@@ -4,7 +4,7 @@
  * Concepto nuevo: persistencia de conversaciones.
  * El agente recuerda los gustos del usuario entre mensajes y entre ejecuciones.
  * Usa el SessionManager nativo del SDK, que persiste la conversación en disco
- * (FileStorage) y la restaura al arrancar.
+ * (LocalFileStorage) y la restaura al arrancar.
  *
  * Requisitos:
  *   - Ollama corriendo en localhost:11434
@@ -12,8 +12,12 @@
  */
 
 import { createInterface } from "node:readline/promises";
-import { Agent, tool, SessionManager, FileStorage } from "@strands-agents/sdk";
-import { createModel } from "./create_model.js";
+import "dotenv/config";
+import { Agent, tool, SessionManager } from "@strands-agents/sdk";
+import { LocalFileStorage } from "@strands-agents/sdk/storage";
+import { BedrockModel } from "@strands-agents/sdk";
+import { VercelModel } from "@strands-agents/sdk/models/vercel";
+import { createOllama } from "ai-sdk-ollama";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -32,7 +36,7 @@ interface Cancion {
 }
 
 const BIBLIOTECA: Cancion[] = JSON.parse(
-  readFileSync(resolve(__dirname, "../data/canciones.json"), "utf-8")
+  readFileSync(resolve(__dirname, "../data/canciones.json"), "utf-8"),
 );
 
 // ─── Tools ───────────────────────────────────────────────────────────────────
@@ -46,20 +50,26 @@ const buscarCanciones = tool({
     artista: z.string().optional().describe("Nombre del artista"),
   }),
   callback: (input) => {
+    const norm = (s: string) =>
+      s
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+
     let resultados = BIBLIOTECA;
     if (input.genero) {
       resultados = resultados.filter((c) =>
-        c.genero.toLowerCase().includes(input.genero!.toLowerCase())
+        norm(c.genero).includes(norm(input.genero!)),
       );
     }
     if (input.mood) {
       resultados = resultados.filter((c) =>
-        c.mood.toLowerCase().includes(input.mood!.toLowerCase())
+        norm(c.mood).includes(norm(input.mood!)),
       );
     }
     if (input.artista) {
       resultados = resultados.filter((c) =>
-        c.artista.toLowerCase().includes(input.artista!.toLowerCase())
+        norm(c.artista).includes(norm(input.artista!)),
       );
     }
     if (resultados.length === 0) {
@@ -73,7 +83,9 @@ const analizarEnergia = tool({
   name: "analizar_energia",
   description: `Analiza el nivel de energía promedio de una lista de canciones y sugiere el orden ideal.`,
   inputSchema: z.object({
-    canciones: z.array(z.string()).describe("Lista de nombres de canciones a analizar"),
+    canciones: z
+      .array(z.string())
+      .describe("Lista de nombres de canciones a analizar"),
   }),
   callback: (input) => {
     const energiaMap: Record<string, number> = {};
@@ -89,14 +101,18 @@ const analizarEnergia = tool({
       analisis.length > 0
         ? analisis.reduce((sum, c) => sum + c.energia, 0) / analisis.length
         : 0;
-    return JSON.stringify({
-      energia_promedio: Math.round(promedio),
-      flow:
-        analisis[0].energia < analisis[analisis.length - 1].energia
-          ? "ascendente"
-          : "descendente",
-      orden_sugerido: analisis.map((c) => c.titulo),
-    }, null, 2);
+    return JSON.stringify(
+      {
+        energia_promedio: Math.round(promedio),
+        flow:
+          analisis[0].energia < analisis[analisis.length - 1].energia
+            ? "ascendente"
+            : "descendente",
+        orden_sugerido: analisis.map((c) => c.titulo),
+      },
+      null,
+      2,
+    );
   },
 });
 
@@ -113,33 +129,46 @@ const duracionPlaylist = tool({
     }
     const total = input.canciones.reduce(
       (sum, t) => sum + (duracionMap[t.toLowerCase()] ?? 3.5),
-      0
+      0,
     );
-    return JSON.stringify({
-      canciones: input.canciones.length,
-      duracion_total_min: Math.round(total * 10) / 10,
-      duracion_formato:
-        total >= 60
-          ? `${Math.floor(total / 60)}h ${Math.floor(total % 60)}min`
-          : `${Math.floor(total)}min`,
-      sugerencia:
-        total < 30
-          ? "Playlist corta, podrías agregar más canciones"
-          : "Buena duración 🎶",
-    }, null, 2);
+    return JSON.stringify(
+      {
+        canciones: input.canciones.length,
+        duracion_total_min: Math.round(total * 10) / 10,
+        duracion_formato:
+          total >= 60
+            ? `${Math.floor(total / 60)}h ${Math.floor(total % 60)}min`
+            : `${Math.floor(total)}min`,
+        sugerencia:
+          total < 30
+            ? "Playlist corta, podrías agregar más canciones"
+            : "Buena duración 🎶",
+      },
+      null,
+      2,
+    );
   },
 });
 
 // ─── Agente con memoria ──────────────────────────────────────────────────────
 
-const modelo = createModel(); // proveedor y modelo vienen del .env
+const modelo = new VercelModel({
+  provider: createOllama({
+    baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+  })(process.env.MODEL_ID ?? "llama3.2"),
+});
+// const modelo = new BedrockModel({
+//   temperature: 0.4,
+//   modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0",
+//   region: process.env.AWS_REGION ?? "us-east-1",
+// });
 
 // SessionManager nativo del SDK: persiste la conversación completa en disco y la
 // restaura al arrancar. El agente recupera su array de mensajes real (con roles),
 // no un resumen pegado al system prompt. Guarda tras cada invoke por defecto.
 const sessionManager = new SessionManager({
   sessionId: "usuario-1",
-  storage: { snapshot: new FileStorage(resolve(__dirname, "../sesiones")) },
+  storage: new LocalFileStorage(resolve(__dirname, "../sesiones")),
 });
 
 const dj = new Agent({
@@ -147,7 +176,10 @@ const dj = new Agent({
   systemPrompt: `Eres un DJ y curador musical experto.
 Recuerdas los gustos del usuario entre conversaciones.
 Si el usuario ya te dijo qué le gusta, úsalo para personalizar tus playlists.
-Usa tus herramientas para buscar en la biblioteca real del usuario.`,
+Usa tus herramientas para buscar en la biblioteca real del usuario. Tienes herramientas de:
+- Buscar canciones
+- Analizar energia
+- Duracion playlist`,
   tools: [buscarCanciones, analizarEnergia, duracionPlaylist],
   sessionManager,
   printer: false, // manejamos la salida a mano con streamColored
@@ -157,7 +189,9 @@ Usa tus herramientas para buscar en la biblioteca real del usuario.`,
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-console.log('🎧 Habla con el DJ. Recuerda tus gustos entre mensajes. Escribe "salir" para terminar.');
+console.log(
+  '🎧 Habla con el DJ. Recuerda tus gustos entre mensajes. Escribe "salir" para terminar.',
+);
 
 while (true) {
   let prompt: string;

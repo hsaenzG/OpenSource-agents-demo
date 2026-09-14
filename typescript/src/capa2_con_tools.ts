@@ -8,8 +8,11 @@
  *   - Modelo llama3.1 descargado
  */
 
+import "dotenv/config";
 import { Agent, tool } from "@strands-agents/sdk";
-import { createModel } from "./create_model.js";
+// import { BedrockModel } from "@strands-agents/sdk";
+import { VercelModel } from "@strands-agents/sdk/models/vercel";
+import { createOllama } from "ai-sdk-ollama";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -50,21 +53,24 @@ Filtra por género, mood o artista.`,
     artista: z.string().optional().describe("Nombre del artista o banda"),
   }),
   callback: (input) => {
+    const norm = (s: string) =>
+      s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
     let resultados = BIBLIOTECA;
 
     if (input.genero) {
       resultados = resultados.filter((c) =>
-        c.genero.toLowerCase().includes(input.genero!.toLowerCase())
+        norm(c.genero).includes(norm(input.genero!))
       );
     }
     if (input.mood) {
       resultados = resultados.filter((c) =>
-        c.mood.toLowerCase().includes(input.mood!.toLowerCase())
+        norm(c.mood).includes(norm(input.mood!))
       );
     }
     if (input.artista) {
       resultados = resultados.filter((c) =>
-        c.artista.toLowerCase().includes(input.artista!.toLowerCase())
+        norm(c.artista).includes(norm(input.artista!))
       );
     }
 
@@ -78,7 +84,12 @@ Filtra por género, mood o artista.`,
 
 // ─── Agente ──────────────────────────────────────────────────────────────────
 
-const modelo = createModel(); // proveedor y modelo vienen del .env
+const modelo = new VercelModel({
+  provider: createOllama({
+    baseURL: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+  })(process.env.MODEL_ID ?? "llama3.2"),
+});
+// const modelo = new BedrockModel({ modelId: process.env.BEDROCK_MODEL_ID ?? "us.amazon.nova-pro-v1:0", region: process.env.AWS_REGION ?? "us-east-1" });
 
 const dj = new Agent({
   model: modelo,
