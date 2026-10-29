@@ -70,21 +70,3 @@ export async function streamColored(
     }
   }
 }
-
-/**
- * Helper para invocar un agente manejando el error de stream incompleto
- * que ocurre con Ollama via ai-sdk-ollama (finish_reason no reconocido por Strands).
- */
-export async function safeInvoke(
-  agent: { invoke: (msg: string) => Promise<any> },
-  message: string
-): Promise<any> {
-  try {
-    return await agent.invoke(message);
-  } catch (error: any) {
-    if (error.message?.includes("Stream ended without completing")) {
-      return { lastMessage: "" };
-    }
-    throw error;
-  }
-}

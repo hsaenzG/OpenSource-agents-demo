@@ -12,7 +12,7 @@ import z from "zod";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import type { PlaybackState, PlaylistFull, SpotifyImage } from "./spotify_client.js";
+import type { PlaybackState, PlaylistFull, SpotifyImage, SpotifyTrack } from "./spotify_client.js";
 import { SpotifyClient, conFiltroDeAnios } from "./spotify_client.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -182,6 +182,18 @@ async function connectSpotify(): Promise<boolean> {
 
 // ─── Tools de Spotify ────────────────────────────────────────────────────────
 
+// Neutraliza los operadores de sintaxis de Spotify en texto libre: el guion excluye
+// términos (operador NOT) y las comillas rompen el parseo de filtros. No tocamos
+// palabras; dejamos que la relevancia de Spotify ordene. No aplica a buscar_en_spotify,
+// que sí usa filtros (genre:/year:).
+function limpiarParaBusqueda(texto: string): string {
+  return texto
+    .replace(/["']/g, " ")
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export const buscarEnSpotify = tool({
   name: "buscar_en_spotify",
   description: `Busca canciones en Spotify. SIEMPRE úsala cuando el usuario pregunte por música.
@@ -240,10 +252,18 @@ resultados distintos de una misma búsqueda (offset:20 trae los siguientes 20).`
 export const reproducirCancion = tool({
   name: "reproducir_cancion",
   description: `Reproduce una canción en el dispositivo activo de Spotify del usuario.
-SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir una canción.`,
+SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir una canción.
+
+Manda el título en 'nombre_cancion' y el artista SIEMPRE en 'artista', por separado.
+NO metas el artista dentro de 'nombre_cancion' (nada de "Título de Fulano" o "Título - Fulano").`,
   inputSchema: z.object({
-    nombre_cancion: z.string().describe("Nombre de la canción a reproducir"),
-    artista: z.string().optional().describe("Nombre del artista (opcional)"),
+    nombre_cancion: z
+      .string()
+      .describe("Solo el título de la canción, sin el artista"),
+    artista: z
+      .string()
+      .optional()
+      .describe("Artista, por separado. Inclúyelo siempre que lo sepas"),
   }),
   callback: async (input) => {
     if (!spotifyDisponible || !sp) return "Spotify no está conectado.";
@@ -253,13 +273,17 @@ SIEMPRE usa esta herramienta cuando el usuario pida escuchar, poner o reproducir
         return "❌ No hay dispositivos activos de Spotify. Abre Spotify en tu celular o computadora e intenta de nuevo.";
       }
 
-      let query = `track:${input.nombre_cancion}`;
-      if (input.artista) query += ` artist:${input.artista}`;
-      let tracks = await sp.searchTracks(query, 5);
+      const titulo = limpiarParaBusqueda(input.nombre_cancion);
+      const artista = input.artista ? limpiarParaBusqueda(input.artista) : "";
 
-      if (tracks.length === 0) {
-        const freeQuery = `${input.nombre_cancion} ${input.artista ?? ""}`.trim();
-        tracks = await sp.searchTracks(freeQuery, 5);
+      const intentos = artista
+        ? [`${titulo} ${artista}`, `track:"${titulo}" artist:"${artista}"`, titulo]
+        : [titulo, `track:"${titulo}"`];
+
+      let tracks: SpotifyTrack[] = [];
+      for (const q of intentos) {
+        tracks = await sp.searchTracks(q, 5);
+        if (tracks.length > 0) break;
       }
       if (tracks.length === 0) return `No encontré "${input.nombre_cancion}" en Spotify.`;
 
